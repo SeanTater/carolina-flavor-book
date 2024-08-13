@@ -5,6 +5,7 @@ from urllib.parse import quote as url_escape
 import numpy as np
 import cv2
 import os
+import subprocess
 
 
 def scan_images(description: str) -> list[Path]:
@@ -110,17 +111,24 @@ Use common sense to fix any errors (like 60 eggs or 3 gallons of vanilla extract
 """
         return ollama(prompt)
 
-    while True:
-        if input("Is this OCR corrupted? [y/n]> ").lower().startswith("y"):
-            print(
-                "The OCR is too messy. Please provide a more clear version. End with an empty line."
-            )
-            ocr_text = []
-            while next_line := input("> "):
-                ocr_text.append(next_line)
-            ocr_text = "\n".join(ocr_text)
-        else:
-            return clean_this_up(ocr_text)
+    if input("Is this OCR corrupted? [y/n]> ").lower().startswith("y"):
+        print("Transcribing a new recipe.")
+        whisper = subprocess.Popen(["whispercpp-stream"], stdout=subprocess.PIPE)
+        text = []
+        try:
+            for line in whisper.stdout:
+                print(line)
+                text.append(line.decode())
+        except KeyboardInterrupt:
+            # Read all the rest
+            line = whisper.stdout.read().decode()
+            text.append(line)
+            whisper.send_signal(2)  # SIGINT
+            whisper.wait()
+            print("Finished transcribing")
+        ocr_text = "\n".join(text)
+
+    return clean_this_up(ocr_text)
 
 
 def auto_crop_scan(color: np.ndarray) -> np.ndarray:
