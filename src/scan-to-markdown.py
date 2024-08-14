@@ -90,7 +90,7 @@ def clean_ocr_or_ask_for_input(ocr_text: str) -> str:
         output = check_output(
             ["ollama", "run", "llama3.1"],
             input=prompt.encode(),
-            env={"OLLAMA_HOST": "http://localhost:11435", **os.environ},
+            env={"OLLAMA_HOST": "http://localhost:11434", **os.environ},
         ).decode()
         print(f"Ollama output: {output}")
         return output
