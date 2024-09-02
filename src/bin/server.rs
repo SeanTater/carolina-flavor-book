@@ -23,6 +23,11 @@ async fn main() {
     // initialize tracing
     tracing_subscriber::fmt::init();
 
+    let res = recipes::search::model::EmbeddingModel::default()
+        .run(&["Embed this sentence".into(), "Or this one".into()])
+        .unwrap();
+    println!("{:?}", res);
+
     // build our application with a route
     let app = Router::new()
         // `GET /` goes to `root`
