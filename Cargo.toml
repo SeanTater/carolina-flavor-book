@@ -1,0 +1,34 @@
+[package]
+name = "recipes"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0.86"
+async-openai = "0.23.4"
+env_logger = "0.11.5"
+glob = "0.3.1"
+image = "0.25.2"
+imageproc = "0.25.0"
+lazy_static = "1.5.0"
+log = "0.4.22"
+ndarray = "0.16.1"
+ocrs = "0.8.0"
+tempfile = "3.12.0"
+tokio = { version = "1.39.3", features = ["full"] }
+tokio-retry = "0.3.0"
+url-escape = "0.1.1"
+webp = "0.3.0"
+rustronomy-watershed = { git = "https://github.com/SeanTater/rustronomy-watershed.git", branch="feature/colored-segmenting-watershed"}
+axum = "0.7.5"
+tracing-subscriber = "0.3.18"
+rusqlite = { version = "0.32.1", features = ["bundled"] }
+handlebars = "6.0.0"
+serde = "1.0.209"
+maplit = "1.0.2"
+r2d2_sqlite = "0.25.0"
+r2d2 = "0.8.10"
+thiserror = "1.0.63"
+base64 = "0.22.1"
+pulldown-cmark = "0.12.0"
+axum_static = "1.7.1"

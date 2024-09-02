@@ -1,0 +1,13 @@
+{{> header}}
+<!-- Render all the recipes in a list -->
+<recipe-cards>
+    {{#each recipes}}
+    <a href="/recipe/{{recipe_id}}">
+        <recipe-card>
+            <h4>{{name}}</h4>
+            <img src="{{thumbnail}}" alt="{{name}}">
+        </recipe-card>
+    </a>
+    {{/each}}
+</recipe-cards>
+{{>footer}}
