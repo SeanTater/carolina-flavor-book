@@ -794,9 +794,6 @@ name = "esaxx-rs"
 version = "0.1.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d817e038c30374a4bcb22f94d0a8a0e216958d4c3dcde369b1439fec4bdda6e6"
-dependencies = [
- "cc",
-]
 
 [[package]]
 name = "eventsource-stream"
@@ -850,7 +847,7 @@ dependencies = [
  "ort",
  "rayon",
  "serde_json",
- "tokenizers 0.19.1",
+ "tokenizers",
 ]
 
 [[package]]
@@ -2666,7 +2663,6 @@ dependencies = [
  "serde_json",
  "tempfile",
  "thiserror",
- "tokenizers 0.20.0",
  "tokio",
  "tokio-retry",
  "tracing",
@@ -3451,38 +3447,6 @@ dependencies = [
  "derive_builder",
  "esaxx-rs",
  "getrandom",
- "itertools 0.12.1",
- "lazy_static",
- "log",
- "macro_rules_attribute",
- "monostate",
- "onig",
- "paste",
- "rand",
- "rayon",
- "rayon-cond",
- "regex",
- "regex-syntax",
- "serde",
- "serde_json",
- "spm_precompiled",
- "thiserror",
- "unicode-normalization-alignments",
- "unicode-segmentation",
- "unicode_categories",
-]
-
-[[package]]
-name = "tokenizers"
-version = "0.20.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c8a24d7f7d6be5b9d1377418b893ab1808af0074f5d1bb2c64784452ddd2aa70"
-dependencies = [
- "aho-corasick",
- "derive_builder",
- "esaxx-rs",
- "getrandom",
- "indicatif",
  "itertools 0.12.1",
  "lazy_static",
  "log",
