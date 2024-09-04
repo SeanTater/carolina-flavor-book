@@ -9,3 +9,5 @@ initial-setup
 
 *.db*
 *.sqlite3*
+.fastembed_cache
+.pytest_cache

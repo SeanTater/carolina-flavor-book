@@ -11,5 +11,11 @@ CREATE TABLE IF NOT EXISTS Embedding (
     span_start INTEGER,
     span_end INTEGER,
     created_on TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    model_name TEXT NOT NULL,
     embedding BLOB NOT NULL
 );
+
+-- Allow the indexing process to be idempotent by deduplicating embeddings
+CREATE UNIQUE INDEX IF NOT EXISTS idx_embedding_model_span ON Embedding(revision_id, model_name, span_start, span_end);
+
+UPDATE Metadata SET value = 2 WHERE key = 'schema_version';

@@ -1,16 +1,16 @@
+use crate::database::{Database, FromRow};
 use anyhow::Result;
 use base64::Engine;
+use half::f16;
 use rusqlite::params;
 use serde::{Deserialize, Serialize, Serializer};
 
-use crate::database::{Database, FromRow};
-
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Recipe {
-    recipe_id: i64,
-    name: String,
-    created_on: String,
-    thumbnail: Option<String>,
+    pub recipe_id: i64,
+    pub name: String,
+    pub created_on: String,
+    pub thumbnail: Option<String>,
 }
 
 impl FromRow for Recipe {
@@ -67,7 +67,10 @@ impl Recipe {
     pub fn get_by_id(db: &Database, recipe_id: i64) -> Result<Option<Self>> {
         Ok(db
             .collect_rows(
-                "SELECT * FROM Recipe WHERE recipe_id = ?",
+                "SELECT *,
+                    (SELECT content_bytes FROM Image WHERE recipe_id = Recipe.recipe_id LIMIT 1) AS thumbnail
+                    FROM Recipe
+                    WHERE Recipe.recipe_id = ?",
                 params![recipe_id],
             )?
             .pop())
@@ -96,8 +99,8 @@ impl Recipe {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Tag {
-    recipe_id: i64,
-    tag: String,
+    pub recipe_id: i64,
+    pub tag: String,
 }
 
 impl FromRow for Tag {
@@ -125,14 +128,14 @@ fn serialize_webp_to_data_url<S: Serializer>(bytes: &[u8], ser: S) -> Result<S::
 
 #[derive(Debug, Serialize, Clone)]
 pub struct Image {
-    image_id: i64,
-    recipe_id: i64,
-    category: String,
-    format: String,
+    pub image_id: i64,
+    pub recipe_id: i64,
+    pub category: String,
+    pub format: String,
     // This is a webp encoded image
     // Store it as a data URL when rendering
     #[serde(serialize_with = "serialize_webp_to_data_url")]
-    content_bytes: Vec<u8>,
+    pub content_bytes: Vec<u8>,
 }
 
 impl FromRow for Image {
@@ -149,23 +152,30 @@ impl FromRow for Image {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Revision {
-    recipe_id: i64,
-    source_name: String,
-    created_on: String,
-    content_text: String,
-    details: String,
-    format: Option<String>,
-    rendered: Option<String>,
+    pub revision_id: i64,
+    pub recipe_id: i64,
+    pub source_name: String,
+    pub created_on: String,
+    pub content_text: String,
+    pub details: String,
+    pub format: Option<String>,
+    pub rendered: Option<String>,
 }
 
 impl FromRow for Revision {
     fn from_row(row: &rusqlite::Row) -> rusqlite::Result<Self> {
         let content_text: String = row.get("content_text")?;
         Ok(Self {
+            revision_id: row.get("revision_id")?,
             recipe_id: row.get("recipe_id")?,
             source_name: row.get("source_name")?,
             created_on: row.get("created_on")?,
-            rendered: Some(Self::render_markdown(&content_text)),
+
+            // Render the markdown content
+            // Normally I would use pulldown_cmark but it doesn't protect against XSS
+            // So instead we're using markdown-rs, which is less featureful but safer
+            // But only the post-1.0 version
+            rendered: Some(markdown::to_html(&content_text)),
             content_text,
             details: row.get("details")?,
             format: row.get("format")?,
@@ -174,20 +184,117 @@ impl FromRow for Revision {
 }
 
 impl Revision {
-    fn render_markdown(markdown: &str) -> String {
-        // Render the markdown content
-        let mut buffer = String::new();
-        let parser = pulldown_cmark::Parser::new(markdown);
-        pulldown_cmark::html::push_html(&mut buffer, parser);
-        buffer
+    /// Get all the embeddings for a revision
+    pub fn get_embeddings(&self, db: &Database) -> Result<Vec<Embedding>> {
+        db.collect_rows(
+            "SELECT * FROM Embedding WHERE recipe_id = ? AND revision_id = ?",
+            params![self.recipe_id, self.created_on],
+        )
+    }
+
+    /// Get some revisions without embeddings for a given model name.
+    ///
+    /// There's no guarantee that by the time the embeddings are computed,
+    /// the revisions will still be without embeddings.
+    pub fn get_revisions_without_embeddings(
+        db: &Database,
+        model_name: &str,
+        limit: i64,
+    ) -> Result<Vec<Revision>> {
+        db.collect_rows(
+            "SELECT *
+            FROM Revision
+            LEFT JOIN Embedding
+                ON Revision.revision_id = Embedding.revision_id
+                AND Embedding.model_name = ?
+            WHERE Embedding.embedding_id IS NULL
+            LIMIT ?",
+            params![model_name, limit],
+        )
     }
 }
 
+/// A full recipe, including all the details. This is used for rendering the recipe page.
 #[derive(Debug, Serialize)]
 pub struct FullRecipe {
-    recipe: Recipe,
-    tags: Vec<Tag>,
-    images: Vec<Image>,
-    revisions: Vec<Revision>,
-    best_revision: Option<Revision>,
+    pub recipe: Recipe,
+    pub tags: Vec<Tag>,
+    pub images: Vec<Image>,
+    pub revisions: Vec<Revision>,
+    pub best_revision: Option<Revision>,
+}
+
+/// Convert a slice of bytes into a vector of f32
+fn bytes_to_f16(bytes: &[u8]) -> Vec<f16> {
+    bytes
+        .chunks_exact(2)
+        .map(|chunk| f16::from_le_bytes([chunk[0], chunk[1]]))
+        .collect()
+}
+
+/// An embedding, associated with a span inside a revision
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct Embedding {
+    pub embedding_id: i64,
+    pub recipe_id: i64,
+    pub revision_id: i64,
+    pub span_start: u32,
+    pub span_end: u32,
+    pub created_on: String,
+    pub model_name: String,
+    pub embedding: Vec<f16>,
+}
+
+impl FromRow for Embedding {
+    fn from_row(row: &rusqlite::Row) -> rusqlite::Result<Self> {
+        Ok(Self {
+            embedding_id: row.get("embedding_id")?,
+            recipe_id: row.get("recipe_id")?,
+            revision_id: row.get("revision_id")?,
+            span_start: row.get("span_start")?,
+            span_end: row.get("span_end")?,
+            created_on: row.get("created_on")?,
+            model_name: row.get("model_name")?,
+            embedding: bytes_to_f16(&row.get::<_, Vec<u8>>("embedding")?),
+        })
+    }
+}
+
+impl Embedding {
+    /// Find the embedding count, to determine whether a revision has been indexed
+    pub fn count_embeddings(db: &Database) -> Result<usize> {
+        let conn = db.pool.get()?;
+        let mut stmt = conn.prepare("SELECT COUNT(*) FROM Embedding")?;
+        let count: i64 = stmt.query_row(params![], |row| row.get(0))?;
+        Ok(count as usize)
+    }
+
+    /// List all embeddings in the database
+    pub fn list_all(db: &Database) -> Result<Vec<Embedding>> {
+        db.collect_rows("SELECT * FROM Embedding", params![])
+    }
+
+    /// Push a batch of embeddings into the database
+    pub fn push(db: &Database, embeddings: &[Embedding]) -> Result<()> {
+        let conn = db.pool.get()?;
+        let mut stmt = conn.prepare(
+            "INSERT OR IGNORE INTO Embedding (recipe_id, revision_id, span_start, span_end, model_name, embedding)
+            VALUES (?, ?, ?, ?, ?, ?)")?;
+        for embedding in embeddings {
+            let embedding_bytes = embedding
+                .embedding
+                .iter()
+                .flat_map(|f| f.to_le_bytes())
+                .collect::<Vec<u8>>();
+            stmt.execute(params![
+                embedding.recipe_id,
+                embedding.revision_id,
+                embedding.span_start,
+                embedding.span_end,
+                embedding.model_name,
+                embedding_bytes
+            ])?;
+        }
+        Ok(())
+    }
 }

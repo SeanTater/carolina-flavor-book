@@ -21,17 +21,21 @@ impl Database {
 
     /// Migrate the database to the latest version.
     async fn migrate(&self) -> Result<()> {
-        let migrations = [include_str!("migrations/01-initial.sql")];
+        let migrations = [
+            include_str!("migrations/01-initial.sql"),
+            include_str!("migrations/02-embeddings.sql"),
+        ];
         // Find the current migration version. If it fails, we need to run all the migrations.
         let conn = self.pool.get()?;
-        let current_version = conn
-            .query_row(
-                "SELECT value FROM metadata WHERE key = 'schema_version'",
-                rusqlite::params![],
-                |row| row.get(0),
-            )
-            .unwrap_or(0);
+        let current_version: String = conn.query_row(
+            "SELECT value FROM metadata WHERE key = 'schema_version'",
+            rusqlite::params![],
+            |row| row.get(0),
+        )?;
+        let current_version = current_version.parse::<u32>().unwrap_or(0);
+        tracing::warn!("Current schema version: {}", current_version);
         for migration in &migrations[current_version as usize..] {
+            tracing::warn!("Applying migration: {}", migration);
             conn.execute_batch(migration)?;
         }
         Ok(())

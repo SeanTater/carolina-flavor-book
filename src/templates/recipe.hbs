@@ -1,26 +1,24 @@
 {{>header}}
-<div>
-    <a href="/">Back to recipes</a>
-    <h1>{{name}}</h1>
-    <h3>Images</h3>
-    <image-cards>
-        {{#each images}}
-        <image-card>
-            <div>
-                Image type {{category}}
-            </div>
-            <img src="{{content_bytes}}" alt="{{@index}}">
-        </image-card>
-        {{/each}}
-    </image-cards>
+<a href="/">Back to home</a>
+<h1>{{name}}</h1>
+<h3>Images</h3>
+<image-cards>
+    {{#each images}}
+    <image-card>
+        <div>
+            Image type {{category}}
+        </div>
+        <img src="{{content_bytes}}" alt="{{@index}}">
+    </image-card>
+    {{/each}}
+</image-cards>
 
-    {{{best_revision.rendered}}}
+{{{best_revision.rendered}}}
 
-    <h3>Tags</h3>
-    <ul class="pills">
-        {{#each tags}}
-        <li>{{tag}}</li>
-        {{/each}}
-    </ul>
-</div>
+<h3>Tags</h3>
+<ul class="pills">
+    {{#each tags}}
+    <li>{{tag}}</li>
+    {{/each}}
+</ul>
 {{>footer}}
