@@ -4,6 +4,11 @@ use base64::Engine;
 use half::f16;
 use rusqlite::params;
 use serde::{Deserialize, Serialize, Serializer};
+use strum::{EnumString, IntoStaticStr};
+
+pub fn sqlite_current_timestamp() -> String {
+    chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string()
+}
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Recipe {
@@ -33,7 +38,7 @@ impl Recipe {
     pub fn list_all(db: &Database) -> Result<Vec<Recipe>> {
         let recipes: Vec<Recipe> = db.collect_rows("
             SELECT *,
-                (SELECT content_bytes FROM Image WHERE recipe_id = Recipe.recipe_id LIMIT 1) AS thumbnail
+                (SELECT content_bytes FROM Image WHERE recipe_id = Recipe.recipe_id ORDER BY category LIMIT 1) AS thumbnail
             FROM Recipe
         ", params![])?;
         Ok(recipes)
@@ -68,12 +73,40 @@ impl Recipe {
         Ok(db
             .collect_rows(
                 "SELECT *,
-                    (SELECT content_bytes FROM Image WHERE recipe_id = Recipe.recipe_id LIMIT 1) AS thumbnail
+                    (SELECT content_bytes FROM Image WHERE recipe_id = Recipe.recipe_id ORDER BY category LIMIT 1) AS thumbnail
                     FROM Recipe
                     WHERE Recipe.recipe_id = ?",
                 params![recipe_id],
             )?
             .pop())
+    }
+
+    /// Get a recipe that doesn't have enough images for a given category.
+    ///
+    /// This is used for a loop that generates images for recipes that don't have enough.
+    pub fn get_any_recipe_without_enough_images(
+        db: &Database,
+        category: &str,
+    ) -> Result<Option<FullRecipe>> {
+        // We want to get a recipe that has less than 3 images.
+        let at_least = 3;
+        db.collect_rows(
+            "SELECT
+                        -- Sqliteism: this will get every column, even besides the group by
+                        Recipe.*
+                    FROM Recipe
+                    LEFT JOIN Image
+                        ON Recipe.recipe_id = Image.recipe_id
+                        AND Image.category = ?
+                    GROUP BY Recipe.recipe_id
+                    HAVING COUNT(Image.image_id) < ?
+                    ORDER BY RANDOM()
+                    LIMIT 1",
+            params![category, at_least],
+        )?
+        .pop()
+        .and_then(|recipe: Recipe| Self::get_full_recipe(db, recipe.recipe_id).transpose())
+        .transpose()
     }
 
     /// Get all the details about a recipe
@@ -147,6 +180,37 @@ impl FromRow for Image {
             format: row.get("format")?,
             content_bytes: row.get("content_bytes")?,
         })
+    }
+}
+
+impl Image {
+    pub fn upload(
+        db: &Database,
+        recipe_id: i64,
+        category: &str,
+        content_bytes: &[u8],
+    ) -> Result<()> {
+        let conn = db.pool.get()?;
+        // Do some rudimentary validation
+        anyhow::ensure!(content_bytes.len() < 20_000_000, "Image is too large");
+        // Check that it decodes as webp
+        let mut img = image::load_from_memory_with_format(content_bytes, image::ImageFormat::WebP)?;
+        // If it's larger than 2048x2048, resize it
+        img = if img.width() > 2048 || img.height() > 2048 {
+            img.resize_to_fill(2048, 2048, image::imageops::FilterType::Lanczos3)
+        } else {
+            img
+        };
+        // Encode it back to webp. image::DynamicImage doesn't offer lossy webp, but "webp" does.
+        let content_bytes = webp::Encoder::from_image(&img)
+            .map_err(|e| anyhow::anyhow!("WebP encoding error: {:?}", e))?
+            .encode(75.0);
+        conn.execute(
+            "INSERT INTO Image (recipe_id, category, format, content_bytes)
+            VALUES (?, ?, 'webp', ?)",
+            params![recipe_id, category, &content_bytes[..]],
+        )?;
+        Ok(())
     }
 }
 
@@ -297,4 +361,10 @@ impl Embedding {
         }
         Ok(())
     }
+}
+
+#[derive(Debug, EnumString, IntoStaticStr, Serialize, Deserialize, Clone, Copy)]
+pub enum ClaimType {
+    GenerateImage,
+    Unknown,
 }

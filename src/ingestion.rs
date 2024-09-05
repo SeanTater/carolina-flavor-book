@@ -1,15 +1,12 @@
 use std::ops::Range;
 use std::path::{Path, PathBuf};
-use std::sync::mpsc::channel;
 
 use anyhow::anyhow;
 use anyhow::ensure;
 use anyhow::Result;
 use async_openai::config::OpenAIConfig;
 use async_openai::types::ChatCompletionRequestMessage;
-use async_openai::types::ChatCompletionRequestSystemMessage;
 use async_openai::types::ChatCompletionRequestUserMessage;
-use async_openai::types::CreateChatCompletionRequest;
 use async_openai::types::CreateChatCompletionRequestArgs;
 use glob::glob;
 use image::DynamicImage;
@@ -18,7 +15,6 @@ use imageproc::contrast::ThresholdType;
 use imageproc::distance_transform::Norm;
 use lazy_static::lazy_static;
 use ocrs::ImageSource;
-use rustronomy_watershed::Watershed;
 use tokio::process::Command;
 use tokio_retry::Retry;
 
@@ -95,7 +91,7 @@ pub fn ocr_one_image(img: DynamicImage) -> Result<String> {
     let img = img.into_rgb8();
     let src = ImageSource::from_bytes(img.as_raw(), img.dimensions())?;
     let ocr_input = OCR_ENGINE.prepare_input(src)?;
-    Ok(OCR_ENGINE.get_text(&ocr_input)?)
+    OCR_ENGINE.get_text(&ocr_input)
 }
 
 /// Transcribes spoken audio from a file.
@@ -166,7 +162,7 @@ pub async fn ocr_images(
     print!("{}\n\nIs the OCR corrupted? [Y/n]>> ", ocr_text);
     let mut buf = String::new();
     std::io::stdin().read_line(&mut buf)?;
-    if buf.to_lowercase().starts_with("y") || buf.trim().is_empty() {
+    if buf.to_lowercase().starts_with('y') || buf.trim().is_empty() {
         ocr_text = take_dictation().await?;
     }
     ocr_text = call_llm_one_shot(
@@ -207,8 +203,7 @@ pub async fn call_llm_one_shot(prompt: &str) -> Result<String> {
         .chat()
         .create(req_args)
         .await?
-        .choices
-        .get(0)
+        .choices.first()
         .ok_or(anyhow!("No response from LLM"))?
         .clone()
         .message
@@ -280,21 +275,21 @@ pub fn auto_crop_scan(color: image::DynamicImage) -> Result<image::DynamicImage>
     for _ in 0..2 {
         map_image_as_ndarray(&mut pipe, |im| stretch_brights(im, 0.75))?;
         pipe = image::imageops::blur(&pipe, 9.0).into();
-        imageproc::morphology::close_mut(&mut pipe.as_mut_luma8().unwrap(), Norm::L1, 9);
+        imageproc::morphology::close_mut(pipe.as_mut_luma8().unwrap(), Norm::L1, 9);
     }
     let otsu_threshold = imageproc::contrast::otsu_level(pipe.as_luma8().unwrap());
     imageproc::contrast::threshold_mut(
-        &mut pipe.as_mut_luma8().unwrap(),
+        pipe.as_mut_luma8().unwrap(),
         otsu_threshold,
         ThresholdType::Binary,
     );
 
     let mut conservative_foreground =
-        imageproc::morphology::dilate(&pipe.as_luma8().unwrap(), Norm::L1, 9);
+        imageproc::morphology::dilate(pipe.as_luma8().unwrap(), Norm::L1, 9);
     image::imageops::invert(&mut conservative_foreground);
 
     let conservative_background =
-        imageproc::morphology::erode(&pipe.as_luma8().unwrap(), Norm::L1, 9);
+        imageproc::morphology::erode(pipe.as_luma8().unwrap(), Norm::L1, 9);
 
     let cross = |color: usize, y_range: Range<_>, x_range: Range<_>| {
         y_range.flat_map(move |y| {

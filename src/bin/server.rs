@@ -1,19 +1,19 @@
 use anyhow::Result;
 use axum::{
-    extract::{Path, State},
+    body::{self, Body},
+    extract::{Multipart, Path, State},
     http::StatusCode,
     response::Html,
     routing::{get, post},
     Form, Json, Router,
 };
 use handlebars::Handlebars;
-use maplit::hashmap;
 use recipes::{
     database::Database,
     errors::{WebError, WebResult},
-    models::Recipe,
+    models::{FullRecipe, Image, Recipe},
 };
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use serde_json::json;
 
 lazy_static::lazy_static! {
@@ -48,6 +48,13 @@ async fn main() -> Result<()> {
         .route("/recipe/:recipe_id", get(get_recipe))
         // `POST /search` goes to `search_recipes`
         .route("/search", get(search_recipes))
+        // `GET /api/recipe_without_enough_images` goes to `get_any_recipe_without_enough_images`
+        .route(
+            "/api/get-task/generate-image/:category",
+            get(get_generate_image_task),
+        )
+        // `POST /api/upload_image/:recipe_id/:category` goes to `upload_image`
+        .route("/api/upload-image/:recipe_id/:category", post(upload_image))
         .nest(
             "/static",
             axum_static::static_router("./src/static").with_state(()),
@@ -114,4 +121,25 @@ async fn search_recipes(
             "results": results,
         }),
     )?))
+}
+
+/// Get a recipe that does not have enough images, so that we can generate some AI-generated images for it.
+/// This is needed because it requires a lot of resources to generate images, so we want to do it in the background,
+/// not in this server, which does not have a GPU and is not optimized for image generation.
+async fn get_generate_image_task(
+    State(allstates): State<AllStates>,
+    Path(category): Path<String>,
+) -> WebResult<Json<Option<FullRecipe>>> {
+    let recipe = Recipe::get_any_recipe_without_enough_images(&allstates.db, &category)?;
+    Ok(Json(recipe))
+}
+
+/// Upload an image for a recipe.
+async fn upload_image(
+    State(allstates): State<AllStates>,
+    Path((recipe_id, category)): Path<(i64, String)>,
+    image_bytes: body::Bytes,
+) -> WebResult<StatusCode> {
+    Image::upload(&allstates.db, recipe_id, &category, &image_bytes[..])?;
+    Ok(StatusCode::OK)
 }

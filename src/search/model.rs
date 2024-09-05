@@ -35,11 +35,11 @@ impl EmbeddingModel {
 
     /// Convenience method to embed a single query sentence with the default prefix for queries.
     pub fn embed_documents<S: AsRef<str>>(&self, documents: &[S]) -> Result<Vec<Vec<f16>>> {
-        Ok(self.embed(
+        self.embed(
             documents,
             // This specific phrase is meaningful to BAAI/bge-small-en-v1.5
             "search_document",
-        )?)
+        )
     }
 
     /// Convenience method to embed a single query sentence with the default prefix for queries.
@@ -102,8 +102,8 @@ pub struct Span<'t> {
 }
 impl Span<'_> {
     pub fn concat<'t>(original: &'t str, spans: &[Self]) -> Span<'t> {
-        let start = spans.into_iter().map(|s| s.start).min().unwrap_or(0);
-        let end = spans.into_iter().map(|s| s.end).max().unwrap_or(0);
+        let start = spans.iter().map(|s| s.start).min().unwrap_or(0);
+        let end = spans.iter().map(|s| s.end).max().unwrap_or(0);
         Span {
             highlight: original.get(start..end).unwrap_or(""),
             start,

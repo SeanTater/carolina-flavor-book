@@ -1,5 +1,4 @@
 use anyhow::{ensure, Result};
-use candle_core::D;
 use half::f16;
 use model::EmbeddingModel;
 use std::sync::RwLock;
@@ -44,7 +43,7 @@ impl DocumentIndex {
                 (recipe_ids.len(), EMBEDDING_SIZE),
                 &candle_core::Device::Cpu,
             )?,
-            recipe_ids: recipe_ids,
+            recipe_ids,
         })
     }
 }

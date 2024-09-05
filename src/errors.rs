@@ -4,8 +4,6 @@ use axum::{
     http,
     response::{IntoResponse, Response},
 };
-use image::error;
-use tracing_subscriber::field::display;
 pub type WebResult<T> = std::result::Result<T, WebError>;
 
 #[derive(thiserror::Error, Debug)]

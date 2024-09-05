@@ -20,12 +20,11 @@ tokio-retry = "0.3.0"
 url-escape = "0.1.1"
 webp = "0.3.0"
 rustronomy-watershed = { git = "https://github.com/SeanTater/rustronomy-watershed.git", branch="feature/colored-segmenting-watershed"}
-axum = "0.7.5"
+axum = { version = "0.7.5", features = ["multipart"] }
 tracing-subscriber = "0.3.18"
 rusqlite = { version = "0.32.1", features = ["bundled"] }
 handlebars = "6.0.0"
 serde = "1.0.209"
-maplit = "1.0.2"
 r2d2_sqlite = "0.25.0"
 r2d2 = "0.8.10"
 thiserror = "1.0.63"
@@ -41,3 +40,4 @@ fastembed = "4.0.0"
 half = { version = "2.4.1", features = ["serde", "zerocopy"] }
 zerocopy = "0.7.35"
 candle-core = "0.6.0"
+strum = { version = "0.26.3", features = ["derive"] }

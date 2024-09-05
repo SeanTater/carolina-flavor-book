@@ -1,9 +1,6 @@
-use std::sync::Arc;
 
 use anyhow::Result;
-use rusqlite::params;
 
-use crate::models::Recipe;
 
 #[derive(Clone, Debug)]
 pub struct Database {
@@ -16,7 +13,7 @@ impl Database {
         let pool = r2d2::Pool::new(manager)?;
         let me = Self { pool };
         me.migrate().await?;
-        Ok(me.into())
+        Ok(me)
     }
 
     /// Migrate the database to the latest version.
