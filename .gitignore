@@ -11,3 +11,4 @@ initial-setup
 *.sqlite3*
 .fastembed_cache
 .pytest_cache
+.env

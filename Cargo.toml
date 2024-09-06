@@ -36,8 +36,13 @@ itertools = "0.13.0"
 rand = "0.8.5"
 chrono = "0.4.38"
 tracing = "0.1.40"
-fastembed = "4.0.0"
+fastembed = { version = "4.0.0", default-features = false, features = ["ort-download-binaries"] }
 half = { version = "2.4.1", features = ["serde", "zerocopy"] }
 zerocopy = "0.7.35"
 candle-core = "0.6.0"
 strum = { version = "0.26.3", features = ["derive"] }
+oauth2 = "4.4.2"
+dotenvy = "0.15.7"
+axum-server = { version = "0.7.1", features = ["rustls", "tls-rustls"] }
+rustls = { version = "0.23.12", features = ["ring"] }
+axum-extra = { version = "0.9.3", features = ["cookie"] }

@@ -1,0 +1,7 @@
+models
+initial-setup
+target
+.env
+*backup
+*.db
+pytest_cache

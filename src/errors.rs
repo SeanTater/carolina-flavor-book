@@ -12,6 +12,8 @@ pub enum WebError {
     InternalError(#[from] anyhow::Error),
     #[error("Templating error: {0}")]
     TemplateError(#[from] handlebars::RenderError),
+    #[error("Authentication Failure")]
+    AuthFailure(String),
     #[error("Not found")]
     NotFound,
     // Potentially more error types in the future
@@ -35,6 +37,8 @@ impl IntoResponse for WebError {
             WebError::TemplateError(err) => {
                 (http::StatusCode::INTERNAL_SERVER_ERROR, display(&err)).into_response()
             }
+            // Auth failures are always explained
+            WebError::AuthFailure(msg) => (http::StatusCode::UNAUTHORIZED, msg).into_response(),
             WebError::NotFound => (http::StatusCode::NOT_FOUND, "Not Found").into_response(),
         }
     }

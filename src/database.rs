@@ -1,6 +1,4 @@
-
 use anyhow::Result;
-
 
 #[derive(Clone, Debug)]
 pub struct Database {
@@ -24,11 +22,13 @@ impl Database {
         ];
         // Find the current migration version. If it fails, we need to run all the migrations.
         let conn = self.pool.get()?;
-        let current_version: String = conn.query_row(
-            "SELECT value FROM metadata WHERE key = 'schema_version'",
-            rusqlite::params![],
-            |row| row.get(0),
-        )?;
+        let current_version: String = conn
+            .query_row(
+                "SELECT value FROM metadata WHERE key = 'schema_version'",
+                rusqlite::params![],
+                |row| row.get(0),
+            )
+            .unwrap_or("0".to_string());
         let current_version = current_version.parse::<u32>().unwrap_or(0);
         tracing::warn!("Current schema version: {}", current_version);
         for migration in &migrations[current_version as usize..] {

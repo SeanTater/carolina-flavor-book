@@ -1,9 +1,12 @@
-use std::sync::Arc;
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use anyhow::Result;
 use half::f16;
 
-use fastembed::{InitOptions, TextEmbedding};
+use fastembed::{InitOptions, TextEmbedding, TokenizerFiles, UserDefinedEmbeddingModel};
 use itertools::Itertools;
 
 #[derive(Clone)]
@@ -13,10 +16,24 @@ pub struct EmbeddingModel {
 
 impl EmbeddingModel {
     pub fn new() -> Result<Self> {
+        use std::fs::read;
+        let base = PathBuf::from(
+            "models/nomic-embed-text-v1.5-q/snapshots/679199c2575b5bfe93b06161d06cd7c16ebe4124",
+        );
+        let user_model = UserDefinedEmbeddingModel::new(
+            read(base.join("onnx/model_quantized.onnx"))?,
+            TokenizerFiles {
+                tokenizer_config_file: read(base.join("tokenizer_config.json"))?,
+                tokenizer_file: read(base.join("tokenizer.json"))?,
+                special_tokens_map_file: read(base.join("special_tokens_map.json"))?,
+                config_file: read(base.join("config.json"))?,
+            },
+        );
         Ok(Self {
-            model: TextEmbedding::try_new(InitOptions::new(
-                fastembed::EmbeddingModel::NomicEmbedTextV15Q,
-            ))?
+            model: TextEmbedding::try_new_from_user_defined(
+                user_model,
+                InitOptions::new(fastembed::EmbeddingModel::NomicEmbedTextV15Q).into(),
+            )?
             .into(),
         })
     }
