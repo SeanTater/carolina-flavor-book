@@ -1,108 +1,58 @@
+use async_trait::async_trait;
+use chrono::Datelike;
+use rand::random;
 use std::{
     collections::VecDeque,
+    convert::Infallible,
     sync::{Arc, RwLock},
 };
+use zerocopy::AsBytes;
 
 use anyhow::Result;
-use oauth2::{
-    basic::{BasicClient, BasicTokenType},
-    reqwest::async_http_client,
-    AuthUrl, AuthorizationCode, ClientId, ClientSecret, CsrfToken, EmptyExtraTokenFields,
-    PkceCodeChallenge, RedirectUrl, RevocationUrl, Scope, TokenUrl,
+use axum::http::request::Parts;
+use axum::{
+    extract::{FromRequestParts, State},
+    http::StatusCode,
 };
+use sha2::Digest;
 
-use crate::errors::WebError;
+pub struct ServicePrincipal;
 
-pub type NormalTokens = oauth2::StandardTokenResponse<EmptyExtraTokenFields, BasicTokenType>;
+#[async_trait]
+impl<S> FromRequestParts<S> for ServicePrincipal
+where
+    S: Send + Sync,
+{
+    type Rejection = StatusCode;
 
-#[derive(Clone)]
-pub struct OauthClient {
-    client: BasicClient,
-    // This only works for a single server deployment. We'd need to put this in a database or cache
-    // to make it work for multiple servers.
-    open_auth_attempts: Arc<RwLock<VecDeque<CsrfToken>>>,
-}
+    async fn from_request_parts(parts: &mut Parts, _: &S) -> Result<Self, Self::Rejection> {
+        let auth = parts
+            .headers
+            .get("Authorization")
+            .ok_or(StatusCode::UNAUTHORIZED)?;
+        let mut hasher = sha2::Sha256::new();
+        let now = chrono::Utc::now().timestamp_micros();
+        let salt: [u8; 32] = random();
+        hasher.update(auth.as_bytes());
+        let their_pre_hash = hasher.finalize();
+        hasher = sha2::Sha256::new();
+        hasher.update(now.as_bytes());
+        hasher.update(salt);
+        hasher.update(their_pre_hash);
+        let their_hash = hasher.finalize();
 
-impl OauthClient {
-    pub fn new_from_env() -> Result<Self> {
-        dotenvy::dotenv()?;
+        let mut hasher = sha2::Sha256::new();
+        let secret_hex = dotenvy::var("AUTH_SECRET").unwrap();
+        let secret = hex::decode(secret_hex).unwrap();
+        hasher.update(now.as_bytes());
+        hasher.update(salt);
+        hasher.update(secret);
+        let our_hash = hasher.finalize();
 
-        // Create an OAuth2 client by specifying the client ID, client secret, authorization URL and
-        // token URL.
-        let client = BasicClient::new(
-            ClientId::new(dotenvy::var("OAUTH2_CLIENT_ID")?),
-            Some(ClientSecret::new(dotenvy::var("OAUTH2_CLIENT_SECRET")?)),
-            AuthUrl::new("https://accounts.google.com/o/oauth2/v2/auth".into())?,
-            Some(TokenUrl::new(
-                "https://www.googleapis.com/oauth2/v3/token".into(),
-            )?),
-        )
-        // Set the URL the user will be redirected to after the authorization process.
-        .set_redirect_uri(RedirectUrl::new(
-            "https://gallagher.kitchen/login/return".into(),
-        )?)
-        .set_revocation_uri(RevocationUrl::new(
-            "https://oauth2.googleapis.com/revoke".into(),
-        )?);
-
-        Ok(Self {
-            client,
-            open_auth_attempts: Arc::new(RwLock::new(VecDeque::with_capacity(100))),
-        })
-    }
-
-    pub fn authorize(&self) -> Result<oauth2::url::Url> {
-        // Generate a PKCE challenge.
-        let (pkce_challenge, _pkce_verifier) = PkceCodeChallenge::new_random_sha256();
-
-        // Generate the full authorization URL.
-        let (auth_url, csrf_token) = self
-            .client
-            .authorize_url(CsrfToken::new_random)
-            // Set the desired scopes. We just want to know your email so we can verify your identity.
-            .add_scope(Scope::new(
-                "https://www.googleapis.com/auth/userinfo.email".to_string(),
-            ))
-            .add_scope(Scope::new(
-                "https://www.googleapis.com/auth/userinfo.profile".to_string(),
-            ))
-            // Set the PKCE code challenge.
-            .set_pkce_challenge(pkce_challenge)
-            .url();
-
-        let mut opens = self.open_auth_attempts.write().unwrap();
-        if opens.len() == 100 {
-            // We don't want to keep too many open attempts.
-            opens.pop_back();
+        if their_hash == our_hash {
+            Ok(ServicePrincipal)
+        } else {
+            Err(StatusCode::UNAUTHORIZED)
         }
-        opens.push_front(csrf_token.clone());
-
-        Ok(auth_url)
     }
-
-    pub async fn trade_for_tokens(&self, query: OAuthQuery) -> Result<NormalTokens, WebError> {
-        // Exchange the code with a token.
-        {
-            let mut opens = self.open_auth_attempts.write().unwrap();
-            if let Some(position) = opens.iter().position(|t| t.secret() == &query.state) {
-                // We're good. But remove it now. Shift instead of swap_remove to keep the order.
-                opens.remove(position);
-            } else {
-                return Err(WebError::AuthFailure("Invalid CSRF token.".into()));
-            }
-        }
-        let token = self
-            .client
-            .exchange_code(AuthorizationCode::new(query.code))
-            .request_async(async_http_client)
-            .await
-            .map_err(|e| WebError::AuthFailure(e.to_string()))?;
-        Ok(token)
-    }
-}
-
-#[derive(serde::Deserialize)]
-pub struct OAuthQuery {
-    pub code: String,
-    pub state: String,
 }

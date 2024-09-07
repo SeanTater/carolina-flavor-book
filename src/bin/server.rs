@@ -9,11 +9,9 @@ use axum::{
     routing::{get, post},
     Form, Json, Router,
 };
-use axum_extra::extract::CookieJar;
 use handlebars::Handlebars;
-use oauth2::TokenResponse;
 use recipes::{
-    auth::{OAuthQuery, OauthClient},
+    auth::ServicePrincipal,
     database::Database,
     errors::{WebError, WebResult},
     models::{FullRecipe, Image, Recipe},
@@ -29,7 +27,6 @@ lazy_static::lazy_static! {
 struct AllStates {
     db: Database,
     doc_index: recipes::search::DocumentIndexHandle,
-    auth_client: OauthClient,
 }
 
 #[tokio::main]
@@ -61,8 +58,6 @@ async fn main() -> Result<()> {
         .route("/recipe/:recipe_id", get(get_recipe))
         // `POST /search` goes to `search_recipes`
         .route("/search", get(search_recipes))
-        .route("/login", get(start_login_route))
-        .route("/login/return", get(back_from_login))
         // `GET /api/recipe_without_enough_images` goes to `get_any_recipe_without_enough_images`
         .route(
             "/api/get-task/generate-image/:category",
@@ -78,7 +73,6 @@ async fn main() -> Result<()> {
         .with_state(AllStates {
             db: default_db,
             doc_index: document_index.clone(),
-            auth_client: OauthClient::new_from_env()?,
         });
 
     // In development, use HTTP. In production, use HTTPS.
@@ -96,6 +90,7 @@ async fn main() -> Result<()> {
         )
         .await
         .context("Loading TLS certificate")?;
+
         let addr = SocketAddr::from(([0, 0, 0, 0], 443));
         tracing::info!("Listening on {}", addr);
         axum_server::bind_rustls(addr, tls_config)
@@ -170,6 +165,7 @@ async fn search_recipes(
 async fn get_generate_image_task(
     State(allstates): State<AllStates>,
     Path(category): Path<String>,
+    _: ServicePrincipal,
 ) -> WebResult<Json<Option<FullRecipe>>> {
     let recipe = Recipe::get_any_recipe_without_enough_images(&allstates.db, &category)?;
     Ok(Json(recipe))
@@ -179,23 +175,9 @@ async fn get_generate_image_task(
 async fn upload_image(
     State(allstates): State<AllStates>,
     Path((recipe_id, category)): Path<(i64, String)>,
+    _: ServicePrincipal,
     image_bytes: body::Bytes,
 ) -> WebResult<StatusCode> {
     Image::upload(&allstates.db, recipe_id, &category, &image_bytes[..])?;
     Ok(StatusCode::OK)
-}
-
-async fn start_login_route(State(allstates): State<AllStates>) -> WebResult<Redirect> {
-    let auth_url = allstates.auth_client.authorize()?;
-    Ok(Redirect::temporary(auth_url.as_str()))
-}
-
-async fn back_from_login(
-    State(allstates): State<AllStates>,
-    mut jar: CookieJar,
-    query: Query<OAuthQuery>,
-) -> WebResult<(CookieJar, Html<String>)> {
-    let token = allstates.auth_client.trade_for_tokens(query.0).await?;
-    jar = jar.add(("access_token", token.access_token().secret().clone()));
-    Ok((jar, Html(format!("Token: {:?}", token))))
 }
