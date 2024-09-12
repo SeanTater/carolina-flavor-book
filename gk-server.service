@@ -1,0 +1,12 @@
+[Unit]
+Description=Gallagher Kitchen
+After=network.target
+
+[Service]
+ExecStart=/app/gk-server-latest
+Restart=always
+RestartSec=3
+WorkingDirectory=/app
+
+[Install]
+WantedBy=default.target

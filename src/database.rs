@@ -19,6 +19,9 @@ impl Database {
         let migrations = [
             include_str!("migrations/01-initial.sql"),
             include_str!("migrations/02-embeddings.sql"),
+            include_str!("migrations/03-repair-revisions.sql"),
+            include_str!("migrations/04-tasks.sql"),
+            include_str!("migrations/05-add-indexes.sql"),
         ];
         // Find the current migration version. If it fails, we need to run all the migrations.
         let conn = self.pool.get()?;

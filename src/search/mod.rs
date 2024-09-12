@@ -78,12 +78,17 @@ impl DocumentIndexHandle {
     /// that you would call .clone() (which is cheap) just before running it in a separate task.
     pub async fn background_index(self) {
         loop {
-            let count = Self::background_index_one_batch(self.db.clone(), &self.embedder)
-                .await
-                .unwrap_or_else(|e| {
-                    tracing::error!("Error indexing embeddings, ignoring: {:?}", e);
-                    0
-                });
+            let db_clone = self.db.clone();
+            let embed_clone = self.embedder.clone();
+            let count = tokio::task::spawn_blocking(move || {
+                Self::background_index_one_batch(db_clone, &embed_clone)
+            })
+            .await
+            .unwrap()
+            .unwrap_or_else(|e| {
+                tracing::error!("Error indexing embeddings, ignoring: {:?}", e);
+                0
+            });
             if count == 0 {
                 // Sleep for a bit before checking again.
                 // This is to avoid a tight loop in case of errors,
@@ -131,7 +136,7 @@ impl DocumentIndexHandle {
     ///     Err(e) => eprintln!("Error during batch indexing: {:?}", e),
     /// }
     /// ```
-    async fn background_index_one_batch(db: Database, model: &EmbeddingModel) -> Result<usize> {
+    fn background_index_one_batch(db: Database, model: &EmbeddingModel) -> Result<usize> {
         let unindexed_revision =
             Revision::get_revisions_without_embeddings(&db, LATEST_MODEL_NAME, 1)?;
         if unindexed_revision.is_empty() {

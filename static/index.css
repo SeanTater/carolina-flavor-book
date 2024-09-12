@@ -1,8 +1,12 @@
+* {
+    box-sizing: border-box;
+}
+
 body {
     font-family: 'Roboto', sans-serif;
     margin: 0;
     padding: 0;
-    background-color: #f5f5f5;
+    background-color: #fffbf3;
 }
 
 a {
@@ -14,22 +18,36 @@ a:hover {
     color: #666;
 }
 
-h4 {
-    margin: 0;
-    font-size: 1.5rem;
-}
 
-article {
-    margin: 0 auto;
+article,
+search-bar {
+    margin: 0 auto 1rem auto;
+    padding: 0.5rem 1rem;
     max-width: 1200px;
-    padding: 20px;
 }
 
-search-bar input {
-    width: 100%;
-    padding: 1rem;
-    margin: 1rem;
-    font-size: large;
+search-bar {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: center;
+    column-gap: 3rem;
+    /* Muted green */
+    background-color: #a0d0b1;
+    /* Rounded corners only on the bottom */
+    border-radius: 0 0 0.4rem 0.4rem;
+}
+
+search-bar form {
+    /* Flex inside flex here */
+    display: flex;
+    flex: 1;
+}
+
+search-bar input[type="text"] {
+    flex: 1;
+    padding: 0.5em;
+    font-size: 1.2rem;
 }
 
 recipe-cards,
@@ -40,18 +58,33 @@ image-cards {
 
 recipe-card,
 image-card {
-    display: grid;
-    grid-template-rows: 4rem 1fr;
+    display: block;
+    position: relative;
     border: 1px solid #ccc;
     border-radius: 5px;
     margin: 10px;
-    padding: 10px;
+    min-width: 300px;
+    min-height: 300px;
+}
+
+recipe-card h4,
+image-card h4 {
+    margin: 0;
+    position: relative;
+    z-index: 1;
+    color: #ddd;
+    background-color: rgba(0, 0, 0, 0.5);
+    border-radius: 5px 5px 0 0;
+    padding: 0.35rem;
 }
 
 recipe-card img,
 image-card img {
+    position: absolute;
+    top: 0;
+    left: 0;
     width: 100%;
-    height: 200px;
+    height: 100%;
     object-fit: cover;
     border-radius: 5px;
 }

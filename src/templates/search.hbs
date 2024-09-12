@@ -1,6 +1,7 @@
 {{> header}}
-<a href="/">Back to home</a>
+{{#if query}}
 <h1>Search results for "{{query}}"</h1>
+{{/if}}
 {{#if results}}
 <recipe-cards>
     {{#each results}}

@@ -4,15 +4,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lessipes</title>
+    <title>Gallagher Kitchen</title>
     <link rel="stylesheet" href="/static/index.css">
 </head>
 
 <body>
+    <search-bar>
+        <!-- Search bar -->
+        <h1><a href="/">Gallagher Kitchen</a></h1>
+        <form action="/search">
+            <input type="text" name="query" id="search" placeholder="Search for recipes">
+        </form>
+    </search-bar>
     <article>
-        <search-bar>
-            <!-- Search bar -->
-            <form action="/search">
-                <input type="text" name="query" id="search" placeholder="Search for recipes">
-            </form>
-        </search-bar>

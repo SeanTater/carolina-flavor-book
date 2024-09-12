@@ -2,7 +2,7 @@ use std::net::SocketAddr;
 
 use anyhow::{Context, Result};
 use axum::{
-    body::{self, Body},
+    body::{self, Body, Bytes},
     extract::{Multipart, Path, Query, State},
     http::StatusCode,
     response::{Html, Redirect},
@@ -14,7 +14,7 @@ use recipes::{
     auth::ServicePrincipal,
     database::Database,
     errors::{WebError, WebResult},
-    models::{FullRecipe, Image, Recipe},
+    models::{FullRecipe, Image, ImageForUpload, Recipe, RecipeForUpload},
 };
 use serde::Deserialize;
 use serde_json::json;
@@ -64,11 +64,17 @@ async fn main() -> Result<()> {
             get(get_generate_image_task),
         )
         // `POST /api/upload_image/:recipe_id/:category` goes to `upload_image`
-        .route("/api/upload-image/:recipe_id/:category", post(upload_image))
+        .route("/api/image/:recipe_id/:category", post(upload_image))
+        // `POST /api/upload_recipe` goes to `upload_recipe`
+        .route("/api/recipe", post(upload_recipe))
         // serve static files from the `./src/static` directory
         .nest(
             "/static",
             axum_static::static_router("./static").with_state(()),
+        )
+        .layer(
+            tower_http::compression::CompressionLayer::new()
+                .quality(tower_http::CompressionLevel::Fastest),
         )
         .with_state(AllStates {
             db: default_db,
@@ -123,7 +129,7 @@ fn handlebars() -> Handlebars<'static> {
 async fn root(State(allstates): State<AllStates>) -> WebResult<Html<String>> {
     Ok(Html(TEMPLATES.render(
         "index",
-        &json!({"recipes": Recipe::list_all(&allstates.db)?}),
+        &json!({"recipes": Recipe::list_some(&allstates.db)?}),
     )?))
 }
 
@@ -178,6 +184,24 @@ async fn upload_image(
     _: ServicePrincipal,
     image_bytes: body::Bytes,
 ) -> WebResult<StatusCode> {
-    Image::upload(&allstates.db, recipe_id, &category, &image_bytes[..])?;
+    Image::push(
+        &allstates.db,
+        recipe_id,
+        ImageForUpload {
+            category,
+            content_bytes: image_bytes.to_vec(),
+        },
+    )?;
     Ok(StatusCode::OK)
+}
+
+/// Upload a recipe and associated information
+async fn upload_recipe(
+    State(allstates): State<AllStates>,
+    _: ServicePrincipal,
+    body: Bytes,
+) -> WebResult<Redirect> {
+    let recipe_upload = bincode::deserialize(&body[..]).context("Deserializing recipe")?;
+    let recipe_id = Recipe::push(&allstates.db, recipe_upload)?;
+    Ok(Redirect::to(&format!("/recipe/{}", recipe_id)))
 }

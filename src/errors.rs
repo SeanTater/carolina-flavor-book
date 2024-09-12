@@ -24,11 +24,12 @@ impl IntoResponse for WebError {
         // In development, we want to return the error message
         // In production, we want to return a generic error message
         let display = |err: &dyn Display| {
-            if cfg!(debug_assertions) {
-                err.to_string()
-            } else {
-                "Internal Server Error".into()
-            }
+            // if cfg!(debug_assertions) {
+            //     err.to_string()
+            // } else {
+            //     "Internal Server Error".into()
+            // }
+            err.to_string()
         };
         match self {
             WebError::InternalError(err) => {

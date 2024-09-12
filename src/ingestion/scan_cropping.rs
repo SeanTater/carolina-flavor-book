@@ -24,11 +24,6 @@ fn default_retry() -> impl Iterator<Item = std::time::Duration> {
         .take(3)
 }
 
-lazy_static! {
-    static ref OCR_ENGINE: ocrs::OcrEngine =
-        ocrs::OcrEngine::new(Default::default()).expect("Unable to load OCR engine");
-}
-
 // #!/usr/bin/env python3
 // from subprocess import check_call, check_output, SubprocessError
 // from pathlib import Path
@@ -72,58 +67,6 @@ async fn scan_images(description: &str) -> Result<Vec<PathBuf>> {
         .collect::<std::result::Result<_, _>>()
         .map_err(anyhow::Error::from)?;
     Ok(images_by_glob)
-}
-
-/// Performs OCR on a single image.
-///
-/// This function takes a `DynamicImage` instance, converts it to RGB8 format,
-/// prepares an input for the OCR engine, and then uses the engine to extract text
-/// from the image. The extracted text is returned as a string.
-///
-/// # Arguments
-///
-/// * `img`: A `DynamicImage` instance representing the image to perform OCR on.
-///
-/// # Returns
-///
-/// A `Result` containing the extracted text as a string, or an error if OCR fails.
-pub fn ocr_one_image(img: DynamicImage) -> Result<String> {
-    let img = img.into_rgb8();
-    let src = ImageSource::from_bytes(img.as_raw(), img.dimensions())?;
-    let ocr_input = OCR_ENGINE.prepare_input(src)?;
-    OCR_ENGINE.get_text(&ocr_input)
-}
-
-/// Transcribes spoken audio from a file.
-///
-/// This function uses the `whisper` command-line tool to transcribe speech
-/// from an input audio file. The transcription is returned as a string.
-///
-/// # Arguments
-///
-/// * None
-///
-/// # Returns
-///
-/// A `Result` containing the transcription as a string, or an error if transcription fails.
-pub async fn take_dictation() -> Result<String> {
-    let temp_dir = tempfile::tempdir()?;
-    let temp_wav = temp_dir.path().join("speech.wav");
-    let status = Command::new("rec")
-        .arg(&temp_wav)
-        .args("rate 16k silence 1 0.1 3% 1 3.0 3%".split_whitespace())
-        .status()
-        .await?;
-    ensure!(status.success(), "Dictation recording failed.");
-
-    let text = Command::new("whisper")
-        .args(["-nt", "-m", "models/ggml-small.bin"])
-        .arg(temp_wav)
-        .output()
-        .await?
-        .stdout;
-
-    Ok(String::from_utf8_lossy(&text).into_owned())
 }
 
 pub async fn ocr_images(
@@ -173,43 +116,6 @@ pub async fn ocr_images(
     .await?;
 
     Ok("".into())
-}
-
-/// Calls the LLM one-shot API with a given prompt.
-///
-/// This function takes a string `prompt` and calls the LLM model using the
-/// OpenAI configuration. The result is returned as a string.
-///
-/// # Arguments
-///
-/// * `prompt`: A string to be used as input for the LLM model.
-///
-/// # Returns
-///
-/// A `Result` containing the response from the LLM model, or an error if the call fails.
-pub async fn call_llm_one_shot(prompt: &str) -> Result<String> {
-    let config = OpenAIConfig::new().with_api_base("http://localhost:11434/v1");
-    let client = async_openai::Client::with_config(config);
-    let req_args = CreateChatCompletionRequestArgs::default()
-        .model("llama3.1")
-        .messages([ChatCompletionRequestMessage::User(
-            ChatCompletionRequestUserMessage {
-                content: prompt.into(),
-                name: None,
-            },
-        )])
-        .build()?;
-    let text = client
-        .chat()
-        .create(req_args)
-        .await?
-        .choices.first()
-        .ok_or(anyhow!("No response from LLM"))?
-        .clone()
-        .message
-        .content
-        .ok_or(anyhow!("No response from LLM"))?;
-    Ok(text)
 }
 
 type NDImageViewMut<'t> = ndarray::ArrayViewMut3<'t, u8>;

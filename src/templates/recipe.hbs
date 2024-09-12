@@ -1,6 +1,8 @@
 {{>header}}
-<a href="/">Back to home</a>
 <h1>{{name}}</h1>
+
+{{{best_revision.rendered}}}
+
 <h3>Images</h3>
 <image-cards>
     {{#each images}}
@@ -12,8 +14,6 @@
     </image-card>
     {{/each}}
 </image-cards>
-
-{{{best_revision.rendered}}}
 
 <h3>Tags</h3>
 <ul class="pills">

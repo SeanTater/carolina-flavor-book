@@ -1,0 +1,1 @@
+Write a recipe for {name}. Begin with a delicious and exciting introduction, then instructions, then directions, then at the end include suggesions and variations. Be positive!

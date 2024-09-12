@@ -1,3 +1,5 @@
+use std::fmt::Debug;
+
 use crate::database::{Database, FromRow};
 use anyhow::Result;
 use base64::Engine;
@@ -35,11 +37,14 @@ impl FromRow for Recipe {
 
 impl Recipe {
     /// List all the recipes in the database.
-    pub fn list_all(db: &Database) -> Result<Vec<Recipe>> {
+    pub fn list_some(db: &Database) -> Result<Vec<Recipe>> {
         let recipes: Vec<Recipe> = db.collect_rows("
             SELECT *,
-                (SELECT content_bytes FROM Image WHERE recipe_id = Recipe.recipe_id ORDER BY category LIMIT 1) AS thumbnail
+                (SELECT content_bytes FROM Image WHERE recipe_id = Recipe.recipe_id ORDER BY category <> 'ai-01' LIMIT 1) AS thumbnail,
+                (SELECT group_concat(tag, ', ') FROM Tag WHERE recipe_id = Recipe.recipe_id) AS tags
             FROM Recipe
+            ORDER BY random()
+            LIMIT 20
         ", params![])?;
         Ok(recipes)
     }
@@ -128,6 +133,26 @@ impl Recipe {
             Ok(None)
         }
     }
+
+    /// Add a new recipe to the database
+    pub fn push(db: &Database, upload: RecipeForUpload) -> Result<i64> {
+        let conn = db.pool.get()?;
+        conn.execute(
+            "INSERT INTO Recipe (name, created_on) VALUES (?, ?)",
+            params![upload.name, sqlite_current_timestamp()],
+        )?;
+        let recipe_id = conn.last_insert_rowid();
+        for tag in upload.tags {
+            Tag::push(db, recipe_id, &tag)?;
+        }
+        for revision in upload.revisions {
+            Revision::push(db, revision, recipe_id)?;
+        }
+        for image in upload.images {
+            Image::push(db, recipe_id, image)?;
+        }
+        Ok(recipe_id)
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -142,6 +167,18 @@ impl FromRow for Tag {
             recipe_id: row.get("recipe_id")?,
             tag: row.get("tag")?,
         })
+    }
+}
+
+impl Tag {
+    /// Add a tag to a recipe
+    pub fn push(db: &Database, recipe_id: i64, tag: &str) -> Result<()> {
+        let conn = db.pool.get()?;
+        conn.execute(
+            "INSERT OR IGNORE INTO Tag (recipe_id, tag) VALUES (?, ?)",
+            params![recipe_id, tag],
+        )?;
+        Ok(())
     }
 }
 
@@ -184,17 +221,16 @@ impl FromRow for Image {
 }
 
 impl Image {
-    pub fn upload(
-        db: &Database,
-        recipe_id: i64,
-        category: &str,
-        content_bytes: &[u8],
-    ) -> Result<()> {
+    pub fn push(db: &Database, recipe_id: i64, upload: ImageForUpload) -> Result<()> {
         let conn = db.pool.get()?;
         // Do some rudimentary validation
-        anyhow::ensure!(content_bytes.len() < 20_000_000, "Image is too large");
+        anyhow::ensure!(
+            upload.content_bytes.len() < 20_000_000,
+            "Image is too large"
+        );
         // Check that it decodes as webp
-        let mut img = image::load_from_memory_with_format(content_bytes, image::ImageFormat::WebP)?;
+        let mut img =
+            image::load_from_memory_with_format(&upload.content_bytes, image::ImageFormat::WebP)?;
         // If it's larger than 2048x2048, resize it
         img = if img.width() > 2048 || img.height() > 2048 {
             img.resize_to_fill(2048, 2048, image::imageops::FilterType::Lanczos3)
@@ -208,7 +244,7 @@ impl Image {
         conn.execute(
             "INSERT INTO Image (recipe_id, category, format, content_bytes)
             VALUES (?, ?, 'webp', ?)",
-            params![recipe_id, category, &content_bytes[..]],
+            params![recipe_id, upload.category, &content_bytes[..]],
         )?;
         Ok(())
     }
@@ -275,6 +311,23 @@ impl Revision {
             LIMIT ?",
             params![model_name, limit],
         )
+    }
+
+    /// Insert a new revision into the database
+    pub fn push(db: &Database, upload: RevisionForUpload, recipe_id: i64) -> Result<()> {
+        let conn = db.pool.get()?;
+        conn.execute(
+            "INSERT INTO Revision (recipe_id, source_name, content_text, format, details)
+            VALUES (?, ?, ?, ?, ?)",
+            params![
+                recipe_id,
+                upload.source_name,
+                upload.content_text,
+                upload.format,
+                upload.details.unwrap_or("{}".into())
+            ],
+        )?;
+        Ok(())
     }
 }
 
@@ -367,4 +420,37 @@ impl Embedding {
 pub enum ClaimType {
     GenerateImage,
     Unknown,
+}
+
+#[derive(Deserialize, Serialize, Clone)]
+pub struct RecipeForUpload {
+    pub name: String,
+    pub revisions: Vec<RevisionForUpload>,
+    pub images: Vec<ImageForUpload>,
+    pub tags: Vec<String>,
+}
+
+impl Debug for RecipeForUpload {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RecipeForUpload")
+            .field("name", &self.name)
+            .field("revisions", &self.revisions)
+            .field("images", &self.images.len())
+            .field("tags", &self.tags)
+            .finish()
+    }
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct RevisionForUpload {
+    pub source_name: String,
+    pub content_text: String,
+    pub format: String,
+    pub details: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct ImageForUpload {
+    pub category: String,
+    pub content_bytes: Vec<u8>,
 }
