@@ -3,7 +3,7 @@ use axum::{
     body::{self, Bytes},
     extract::{Path, State},
     http::StatusCode,
-    response::{Html, Redirect},
+    response::{Html, IntoResponse, Redirect},
     routing::{get, post},
     Form, Json, Router,
 };
@@ -82,10 +82,7 @@ async fn main() -> Result<()> {
         // `POST /api/upload_recipe` goes to `upload_recipe`
         .route("/api/recipe", post(upload_recipe))
         // serve static files from the `./src/static` directory
-        .nest(
-            "/static",
-            axum_static::static_router("./static").with_state(()),
-        )
+        .route("/static/*path", get(serve_static))
         .layer(
             tower_http::compression::CompressionLayer::new()
                 .quality(tower_http::CompressionLevel::Fastest),
@@ -218,4 +215,22 @@ async fn upload_recipe(
     let recipe_upload = bincode::deserialize(&body[..]).context("Deserializing recipe")?;
     let recipe_id = Recipe::push(&allstates.db, recipe_upload)?;
     Ok(Redirect::to(&format!("/recipe/{}", recipe_id)))
+}
+
+/// Serve static files from in memeory using `include_dir!`
+async fn serve_static(Path(path): Path<String>) -> WebResult<impl IntoResponse> {
+    let dir = include_dir::include_dir!("$CARGO_MANIFEST_DIR/static");
+    let bytes = dir.get_file(&path).ok_or(WebError::NotFound)?.contents();
+    let header = (
+        "Content-Type",
+        match path.split('.').last() {
+            Some("css") => "text/css",
+            Some("js") => "text/javascript",
+            Some("png") => "image/png",
+            Some("jpg") | Some("jpeg") => "image/jpeg",
+            Some("svg") => "image/svg+xml",
+            _ => "application/octet-stream",
+        },
+    );
+    Ok(([header], bytes).into_response())
 }

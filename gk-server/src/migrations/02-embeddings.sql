@@ -1,3 +1,4 @@
+BEGIN;
 -- Add an id column to the Revision table
 ALTER TABLE Revision ADD COLUMN revision_id INTEGER;
 UPDATE Revision SET revision_id = rowid;
@@ -19,3 +20,4 @@ CREATE TABLE IF NOT EXISTS Embedding (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_embedding_model_span ON Embedding(revision_id, model_name, span_start, span_end);
 
 UPDATE Metadata SET value = 2 WHERE key = 'schema_version';
+COMMIT;

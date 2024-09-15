@@ -1,0 +1,41 @@
+version: '3'
+vars:
+  VERSION:
+    sh: cargo metadata --format-version 1 | jq -r '.packages[] | select(.name == "gk-server") | .version'
+tasks:
+  build:
+    cmds:
+      - echo Building {{.VERSION}}
+      - "cargo chef prepare --bin gk-server"
+      - "docker build -t gk-server:{{.VERSION}} ."
+      - 'docker tag gk-server:{{.VERSION}} gk-server:latest'
+      - 'docker tag gk-server:{{.VERSION}} us-central1-docker.pkg.dev/telepathicpenguins/gk-container-images/gk-server:{{.VERSION}}'
+      - 'docker tag gk-server:{{.VERSION}} us-central1-docker.pkg.dev/telepathicpenguins/gk-container-images/gk-server:latest'
+  run-local:
+    deps: [build]
+    cmds:
+      # No TLS enabled
+      - 'docker run -p 3000:3000 -v $PWD/data/:/app/data/ -v $PWD/.env:/app/.env gk-server '
+  
+  setup-vm:
+    cmds:
+      # Not sure if this auth will work non-interactively. It normally requires you to hit Enter
+      - gcloud compute scp gk-server/launch-in-prod-docker.sh gk-vm-02:~
+      - gcloud compute ssh gk-vm-02 --command "chmod +x launch-in-prod-docker.sh && ./launch-in-prod-docker.sh"
+  login:
+    cmds:
+      - gcloud compute ssh gk-vm-02
+  
+  deploy:
+    deps: [build]
+    cmds:
+      - echo Pushing {{.VERSION}}
+      # Push as this version
+      - docker push us-central1-docker.pkg.dev/telepathicpenguins/gk-container-images/gk-server:{{.VERSION}}'
+      # Push as latest
+      - 'docker push us-central1-docker.pkg.dev/telepathicpenguins/gk-container-images/gk-server:latest'
+  
+  setup-dev-env:
+    cmds:
+      - gcloud auth configure-docker us-central1-docker.pkg.dev
+

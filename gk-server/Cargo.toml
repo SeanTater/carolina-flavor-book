@@ -1,6 +1,6 @@
 [package]
 name = "gk-server"
-version = "0.1.2"
+version = "0.2.0"
 edition = "2021"
 
 [dependencies]
@@ -8,7 +8,6 @@ anyhow = { workspace = true }
 async-trait = { workspace = true }
 axum = { features = ["multipart"], workspace = true }
 axum-server = { features = ["rustls", "tls-rustls"], workspace = true }# Server only
-axum_static = { workspace = true }# Server only
 base64 = { workspace = true }
 bincode = { workspace = true }
 candle-core = { workspace = true }
@@ -24,6 +23,7 @@ handlebars = { workspace = true }
 hex = { workspace = true }
 image = { workspace = true }
 imageproc = { workspace = true }
+include_dir = "0.7.4"
 itertools = { workspace = true }
 lazy_static = { workspace = true }
 log = { workspace = true }

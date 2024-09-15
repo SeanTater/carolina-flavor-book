@@ -33,4 +33,5 @@ CREATE TABLE IF NOT EXISTS Tag (
     tag TEXT NOT NULL,
     PRIMARY KEY (recipe_id, tag)
 );
+INSERT INTO Metadata(key, value) VALUES ('schema_version', '1');
 COMMIT;
