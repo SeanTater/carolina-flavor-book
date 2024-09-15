@@ -5,3 +5,4 @@ target
 *backup
 *.db
 pytest_cache
+data

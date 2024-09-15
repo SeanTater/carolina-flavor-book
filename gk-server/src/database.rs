@@ -7,7 +7,7 @@ pub struct Database {
 
 impl Database {
     pub async fn connect_default() -> Result<Self> {
-        let manager = r2d2_sqlite::SqliteConnectionManager::file("recipes.db");
+        let manager = r2d2_sqlite::SqliteConnectionManager::file("data/recipes.db");
         let pool = r2d2::Pool::new(manager)?;
         let me = Self { pool };
         me.migrate().await?;

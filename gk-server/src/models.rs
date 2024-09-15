@@ -3,6 +3,7 @@ use std::fmt::Debug;
 use crate::database::{Database, FromRow};
 use anyhow::Result;
 use base64::Engine;
+use gk::basic_models;
 use half::f16;
 use rusqlite::params;
 use serde::{Deserialize, Serialize, Serializer};
@@ -135,7 +136,7 @@ impl Recipe {
     }
 
     /// Add a new recipe to the database
-    pub fn push(db: &Database, upload: RecipeForUpload) -> Result<i64> {
+    pub fn push(db: &Database, upload: basic_models::RecipeForUpload) -> Result<i64> {
         let conn = db.pool.get()?;
         conn.execute(
             "INSERT INTO Recipe (name, created_on) VALUES (?, ?)",
@@ -221,7 +222,7 @@ impl FromRow for Image {
 }
 
 impl Image {
-    pub fn push(db: &Database, recipe_id: i64, upload: ImageForUpload) -> Result<()> {
+    pub fn push(db: &Database, recipe_id: i64, upload: basic_models::ImageForUpload) -> Result<()> {
         let conn = db.pool.get()?;
         // Do some rudimentary validation
         anyhow::ensure!(
@@ -314,7 +315,11 @@ impl Revision {
     }
 
     /// Insert a new revision into the database
-    pub fn push(db: &Database, upload: RevisionForUpload, recipe_id: i64) -> Result<()> {
+    pub fn push(
+        db: &Database,
+        upload: basic_models::RevisionForUpload,
+        recipe_id: i64,
+    ) -> Result<()> {
         let conn = db.pool.get()?;
         conn.execute(
             "INSERT INTO Revision (recipe_id, source_name, content_text, format, details)
@@ -387,8 +392,11 @@ impl Embedding {
     }
 
     /// List all embeddings in the database
-    pub fn list_all(db: &Database) -> Result<Vec<Embedding>> {
-        db.collect_rows("SELECT * FROM Embedding", params![])
+    pub fn list_all(db: &Database, model_name: &str) -> Result<Vec<Embedding>> {
+        db.collect_rows(
+            "SELECT * FROM Embedding WHERE model_name = ?",
+            params![model_name],
+        )
     }
 
     /// Push a batch of embeddings into the database
@@ -420,37 +428,4 @@ impl Embedding {
 pub enum ClaimType {
     GenerateImage,
     Unknown,
-}
-
-#[derive(Deserialize, Serialize, Clone)]
-pub struct RecipeForUpload {
-    pub name: String,
-    pub revisions: Vec<RevisionForUpload>,
-    pub images: Vec<ImageForUpload>,
-    pub tags: Vec<String>,
-}
-
-impl Debug for RecipeForUpload {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("RecipeForUpload")
-            .field("name", &self.name)
-            .field("revisions", &self.revisions)
-            .field("images", &self.images.len())
-            .field("tags", &self.tags)
-            .finish()
-    }
-}
-
-#[derive(Debug, Deserialize, Serialize, Clone)]
-pub struct RevisionForUpload {
-    pub source_name: String,
-    pub content_text: String,
-    pub format: String,
-    pub details: Option<String>,
-}
-
-#[derive(Debug, Deserialize, Serialize, Clone)]
-pub struct ImageForUpload {
-    pub category: String,
-    pub content_bytes: Vec<u8>,
 }

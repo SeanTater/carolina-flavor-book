@@ -9,6 +9,8 @@ use half::f16;
 use fastembed::{InitOptions, TextEmbedding, TokenizerFiles, UserDefinedEmbeddingModel};
 use itertools::Itertools;
 
+use super::EMBEDDING_SIZE;
+
 #[derive(Clone)]
 pub struct EmbeddingModel {
     model: Arc<TextEmbedding>,
@@ -17,9 +19,7 @@ pub struct EmbeddingModel {
 impl EmbeddingModel {
     pub fn new() -> Result<Self> {
         use std::fs::read;
-        let base = PathBuf::from(
-            "models/nomic-embed-text-v1.5-q/snapshots/679199c2575b5bfe93b06161d06cd7c16ebe4124",
-        );
+        let base = PathBuf::from("models/snowflake-arctic-embed-xs");
         let user_model = UserDefinedEmbeddingModel::new(
             read(base.join("onnx/model_quantized.onnx"))?,
             TokenizerFiles {
@@ -32,7 +32,7 @@ impl EmbeddingModel {
         Ok(Self {
             model: TextEmbedding::try_new_from_user_defined(
                 user_model,
-                InitOptions::new(fastembed::EmbeddingModel::NomicEmbedTextV15Q).into(),
+                InitOptions::new(fastembed::EmbeddingModel::AllMiniLML6V2Q).into(),
             )?
             .into(),
         })
@@ -76,7 +76,12 @@ impl EmbeddingModel {
     pub fn truncate(embeddings: Vec<Vec<f32>>) -> Vec<Vec<f16>> {
         embeddings
             .into_iter()
-            .map(|e| e.into_iter().take(64).map(f16::from_f32).collect())
+            .map(|e| {
+                e.into_iter()
+                    .take(EMBEDDING_SIZE)
+                    .map(f16::from_f32)
+                    .collect()
+            })
             .collect()
     }
 }

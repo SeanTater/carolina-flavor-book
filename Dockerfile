@@ -3,7 +3,7 @@ FROM docker.io/rust:bookworm as builder
 WORKDIR /app
 COPY Cargo.lock Cargo.toml /app/
 COPY src/ /app/src/
-RUN cargo build --release --bin server
+RUN cargo build --release --bin gk-server
 
 FROM debian:bookworm-slim
 
@@ -23,4 +23,4 @@ RUN apt-get update \
 COPY --from=builder /app/target/release/server /usr/local/bin/server
 COPY models /app/models
 WORKDIR /app
-CMD [ "/usr/local/bin/server" ]
+CMD [ "/usr/local/bin/gk-server" ]

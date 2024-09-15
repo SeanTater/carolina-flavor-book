@@ -12,8 +12,8 @@ use crate::{
 };
 
 pub mod model;
-const LATEST_MODEL_NAME: &str = "nomic-embed-text-v1.5-truncate-64";
-const EMBEDDING_SIZE: usize = 64;
+const LATEST_MODEL_NAME: &str = "snowflake-arctic-embed-xs-fp16";
+const EMBEDDING_SIZE: usize = 384;
 
 #[derive(Clone)]
 pub struct DocumentIndexHandle {
@@ -212,7 +212,7 @@ impl DocumentIndexHandle {
             return Ok(());
         }
 
-        let embeddings = Embedding::list_all(&self.db)?;
+        let embeddings = Embedding::list_all(&self.db, LATEST_MODEL_NAME)?;
         let recipe_ids = embeddings.iter().map(|e| e.recipe_id).collect_vec();
         let matrix = embeddings
             .into_iter()

@@ -9,8 +9,8 @@ lazy_static::lazy_static! {
 /// Load the default OCR engine. The models for this engine are embedded in the binary,
 /// so this function does not require any arguments or IO.
 fn default_ocr_engine() -> ocrs::OcrEngine {
-    let detector = include_bytes!("../../models/text-detection.rten");
-    let recognizer = include_bytes!("../../models/text-recognition.rten");
+    let detector = include_bytes!("../../../models/text-detection.rten");
+    let recognizer = include_bytes!("../../../models/text-recognition.rten");
     let detection_model =
         rten::Model::load_static_slice(detector).expect("Failed to load detector model");
     let recognition_model =

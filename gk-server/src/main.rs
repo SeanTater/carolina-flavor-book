@@ -9,13 +9,16 @@ use axum::{
     routing::{get, post},
     Form, Json, Router,
 };
-use handlebars::Handlebars;
-use recipes::{
+use clap::Parser;
+use gk::basic_models;
+use gk_server::{
     auth::ServicePrincipal,
     database::Database,
     errors::{WebError, WebResult},
-    models::{FullRecipe, Image, ImageForUpload, Recipe, RecipeForUpload},
+    models::{FullRecipe, Image, Recipe},
+    search,
 };
+use handlebars::Handlebars;
 use serde::Deserialize;
 use serde_json::json;
 
@@ -23,10 +26,21 @@ lazy_static::lazy_static! {
     static ref TEMPLATES: Handlebars<'static> = handlebars();
 }
 
+#[derive(Parser, Debug)]
+struct Args {
+    /// The address and optionally port to bind to
+    #[clap(long, default_value = "0.0.0.0:3000")]
+    address: String,
+
+    /// Whether to use HTTPS / TLS
+    #[clap(long)]
+    tls: bool,
+}
+
 #[derive(Clone)]
 struct AllStates {
     db: Database,
-    doc_index: recipes::search::DocumentIndexHandle,
+    doc_index: search::DocumentIndexHandle,
 }
 
 #[tokio::main]
@@ -34,14 +48,16 @@ async fn main() -> Result<()> {
     // initialize tracing
     tracing_subscriber::fmt::init();
 
+    // Parse command line arguments
+    let args = Args::parse();
+
     // connect to the database
     let default_db = Database::connect_default()
         .await
         .context("Connecting to database")?;
     // setup an embedding model
-    let embedder =
-        recipes::search::model::EmbeddingModel::new().context("Building embedding model")?;
-    let document_index = recipes::search::DocumentIndexHandle::new(default_db.clone(), embedder);
+    let embedder = search::model::EmbeddingModel::new().context("Building embedding model")?;
+    let document_index = search::DocumentIndexHandle::new(default_db.clone(), embedder);
     document_index
         .refresh_index()
         .context("Refreshing document index")?;
@@ -83,10 +99,7 @@ async fn main() -> Result<()> {
 
     // In development, use HTTP. In production, use HTTPS.
 
-    if cfg!(debug_assertions) {
-        let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await?;
-        axum::serve(listener, app).await?;
-    } else {
+    if args.tls {
         rustls::crypto::ring::default_provider()
             .install_default()
             .expect("Failed to install rustls crypto provider");
@@ -97,29 +110,32 @@ async fn main() -> Result<()> {
         .await
         .context("Loading TLS certificate")?;
 
-        let addr = SocketAddr::from(([0, 0, 0, 0], 443));
+        let addr = args.address.parse()?;
         tracing::info!("Listening on {}", addr);
         axum_server::bind_rustls(addr, tls_config)
             .serve(app.into_make_service())
             .await
             .context("Starting TLS server")?;
+    } else {
+        let listener = tokio::net::TcpListener::bind(args.address).await?;
+        axum::serve(listener, app).await?;
     }
     Ok(())
 }
 
 fn handlebars() -> Handlebars<'static> {
     let mut reg = Handlebars::new();
-    reg.register_template_string("index", include_str!("../templates/index.hbs"))
+    reg.register_template_string("index", include_str!("templates/index.hbs"))
         .unwrap();
-    reg.register_template_string("recipe", include_str!("../templates/recipe.hbs"))
+    reg.register_template_string("recipe", include_str!("templates/recipe.hbs"))
         .unwrap();
-    reg.register_template_string("search", include_str!("../templates/search.hbs"))
+    reg.register_template_string("search", include_str!("templates/search.hbs"))
         .unwrap();
 
     // Register partials
-    reg.register_partial("header", include_str!("../templates/header.hbs"))
+    reg.register_partial("header", include_str!("templates/header.hbs"))
         .unwrap();
-    reg.register_partial("footer", include_str!("../templates/footer.hbs"))
+    reg.register_partial("footer", include_str!("templates/footer.hbs"))
         .unwrap();
 
     reg
@@ -187,7 +203,7 @@ async fn upload_image(
     Image::push(
         &allstates.db,
         recipe_id,
-        ImageForUpload {
+        basic_models::ImageForUpload {
             category,
             content_bytes: image_bytes.to_vec(),
         },

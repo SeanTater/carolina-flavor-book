@@ -1,9 +1,7 @@
 use anyhow::{ensure, Ok, Result};
 use clap::{Parser, ValueEnum};
-use recipes::{
-    ingestion::convert_to_webp,
-    models::{ImageForUpload, RecipeForUpload, RevisionForUpload},
-};
+use gk::basic_models;
+use gk_client::ingestion;
 
 /// Add a recipe to the cookbook
 #[derive(Parser, Debug)]
@@ -57,7 +55,7 @@ async fn main() -> Result<()> {
 
     if let Some(device_number) = args.webcam {
         println!("Webcam mode enabled");
-        let mut picture = recipes::ingestion::take_picture(device_number)?;
+        let mut picture = ingestion::take_picture(device_number)?;
         picture = match args.rotate.unwrap_or(Rotate::R0) {
             Rotate::R0 => picture,
             Rotate::R90 => picture.rotate90(),
@@ -65,16 +63,16 @@ async fn main() -> Result<()> {
             Rotate::R270 => picture.rotate270(),
         };
 
-        let content_text = recipes::ingestion::read_text_from_image(&picture)?;
+        let content_text = ingestion::read_text_from_image(&picture)?;
 
-        let webp_bytes = convert_to_webp(&picture, 75.0)?;
-        images.push(ImageForUpload {
+        let webp_bytes = ingestion::convert_to_webp(&picture, 75.0)?;
+        images.push(basic_models::ImageForUpload {
             category: "raw scan".to_string(),
             content_bytes: webp_bytes,
         });
 
         best_input_text = Some(content_text.clone());
-        revisions.push(RevisionForUpload {
+        revisions.push(basic_models::RevisionForUpload {
             source_name: "ocr".to_string(),
             content_text: content_text.clone(),
             format: "text".to_string(),
@@ -84,10 +82,10 @@ async fn main() -> Result<()> {
 
     if args.dictation {
         println!("Dictation mode enabled");
-        let words = recipes::ingestion::take_dictation().await?;
+        let words = ingestion::take_dictation().await?;
         best_input_text = Some(words.clone());
         println!("Transcribed words: {}", words);
-        revisions.push(RevisionForUpload {
+        revisions.push(basic_models::RevisionForUpload {
             source_name: "voice".to_string(),
             content_text: words,
             format: "text".to_string(),
@@ -97,10 +95,9 @@ async fn main() -> Result<()> {
 
     if args.freestyle {
         println!("Freestyle mode enabled");
-        let better_text =
-            recipes::ingestion::freestyle(&args.name, Some(&args.llm_api_base)).await?;
+        let better_text = ingestion::freestyle(&args.name, Some(&args.llm_api_base)).await?;
         best_input_text = Some(better_text.clone());
-        revisions.push(RevisionForUpload {
+        revisions.push(basic_models::RevisionForUpload {
             source_name: "llm".to_string(),
             content_text: better_text,
             format: "markdown".to_string(),
@@ -111,13 +108,10 @@ async fn main() -> Result<()> {
 
     if let Some(content_text) = best_input_text {
         if !args.freestyle {
-            let better_text = recipes::ingestion::improve_recipe_with_llm(
-                &content_text,
-                Some(&args.llm_api_base),
-            )
-            .await?;
+            let better_text =
+                ingestion::improve_recipe_with_llm(&content_text, Some(&args.llm_api_base)).await?;
 
-            revisions.push(RevisionForUpload {
+            revisions.push(basic_models::RevisionForUpload {
                 source_name: "llm".to_string(),
                 content_text: better_text,
                 format: "markdown".to_string(),
@@ -126,7 +120,7 @@ async fn main() -> Result<()> {
         }
     }
 
-    let recipe_upload = RecipeForUpload {
+    let recipe_upload = basic_models::RecipeForUpload {
         name: args.name,
         revisions: revisions,
         images: images,
