@@ -1,9 +1,7 @@
-use std::net::SocketAddr;
-
 use anyhow::{Context, Result};
 use axum::{
-    body::{self, Body, Bytes},
-    extract::{Multipart, Path, Query, State},
+    body::{self, Bytes},
+    extract::{Path, State},
     http::StatusCode,
     response::{Html, Redirect},
     routing::{get, post},

@@ -1,6 +1,5 @@
 use anyhow::{anyhow, ensure, Result};
 use image::DynamicImage;
-use ocrs::ImageSource;
 use tokio::process::Command;
 mod llm;
 mod ocr;
@@ -50,7 +49,7 @@ pub async fn take_dictation() -> Result<String> {
 /// This is useful because the image crate only supports lossless webp,
 /// but the webp crate supports lossy webp.
 pub fn convert_to_webp(img: &DynamicImage, quality: f32) -> Result<Vec<u8>> {
-    let img_webp = webp::Encoder::from_image(&img)
+    let img_webp = webp::Encoder::from_image(img)
         .map_err(|st| anyhow!("Webp encoder error: {}", st))?
         .encode(quality);
     Ok(img_webp.to_vec())

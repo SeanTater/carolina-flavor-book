@@ -1,19 +1,10 @@
 use async_trait::async_trait;
-use chrono::Datelike;
 use rand::random;
-use std::{
-    collections::VecDeque,
-    convert::Infallible,
-    sync::{Arc, RwLock},
-};
 use zerocopy::AsBytes;
 
 use anyhow::Result;
 use axum::http::request::Parts;
-use axum::{
-    extract::{FromRequestParts, State},
-    http::StatusCode,
-};
+use axum::{extract::FromRequestParts, http::StatusCode};
 use sha2::Digest;
 
 pub struct ServicePrincipal;

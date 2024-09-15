@@ -4,51 +4,50 @@ version = "0.1.2"
 edition = "2021"
 
 [dependencies]
-anyhow = "1.0.86"
-async-trait = "0.1.82"
-axum = { version = "0.7.5", features = ["multipart"] }
-axum-server = { version = "0.7.1", features = ["rustls", "tls-rustls"] }# Server only
-axum_static = { version = "1.7.1"  }# Server only
-base64 = "0.22.1"
-bincode = "1.3.3"
-candle-core = "0.6.0"
-chrono = "0.4.38"
-clap = { version = "4.5.17", features = ["derive"] }
-dotenvy = "0.15.7"
-env_logger = "0.11.5"
-fastembed = { version = "4.0.0", default-features = false, features = ["ort-download-binaries"] }
-gk = { path = "../gk"}
-glob = "0.3.1"
-half = { version = "2.4.1", features = ["serde", "zerocopy"] }
-handlebars = "6.0.0"
-hex = "0.4.3"
-image = "0.25.2"
-imageproc = "0.25.0"
-itertools = "0.13.0"
-lazy_static = "1.5.0"
-log = "0.4.22"
-markdown = "1.0.0-alpha.20"
-r2d2 = { version = "0.8.10" }# Server only
-r2d2_sqlite = { version = "0.25.0" }# Server only
-rand = "0.8.5"
-reqwest = { version = "0.12.7", features = ["rustls-tls"], default-features = false }
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+axum = { features = ["multipart"], workspace = true }
+axum-server = { features = ["rustls", "tls-rustls"], workspace = true }# Server only
+axum_static = { workspace = true }# Server only
+base64 = { workspace = true }
+bincode = { workspace = true }
+candle-core = { workspace = true }
+chrono = { workspace = true }
+clap = { features = ["derive"], workspace = true }
+dotenvy = { workspace = true }
+env_logger = { workspace = true }
+fastembed = { default-features = false, features = ["ort-download-binaries"], workspace = true }
+gk = { path = "../gk" }
+glob = { workspace = true }
+half = { features = ["serde", "zerocopy"], workspace = true }
+handlebars = { workspace = true }
+hex = { workspace = true }
+image = { workspace = true }
+imageproc = { workspace = true }
+itertools = { workspace = true }
+lazy_static = { workspace = true }
+log = { workspace = true }
+markdown = { workspace = true }
+r2d2 = { workspace = true }# Server only
+r2d2_sqlite = { workspace = true }# Server only
+rand = { workspace = true }
+reqwest = { features = ["rustls-tls"], default-features = false, workspace = true }
 
-rten = "0.13.1"
-rusqlite = { version = "0.32.1", features = ["bundled"] }
-rustls = { version = "0.23.12", features = ["ring"] }
-serde = "1.0.209"
-serde_json = "1.0.127"
-sha2 = "0.10.8"
-strum = { version = "0.26.3", features = ["derive"] }
-thiserror = "1.0.63"
-tokio = { version = "1.39.3", features = ["full"] }
-tokio-retry = "0.3.0"
+rten = { workspace = true }
+rusqlite = { features = ["bundled"], workspace = true }
+rustls = { features = ["ring"], workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+strum = { features = ["derive"], workspace = true }
+thiserror = { workspace = true }
+tokio = { features = ["full"], workspace = true }
+tokio-retry = { workspace = true }
 
-tower-http = { version = "0.5.2", features = ["compression-br"] }# Server only
-tracing = "0.1.40"
-tracing-subscriber = "0.3.18"
-url-escape = "0.1.1"
+tower-http = { features = ["compression-br"], workspace = true }# Server only
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+url-escape = { workspace = true }
 
-
-webp = "0.3.0"
-zerocopy = "0.7.35"
+webp = { workspace = true }
+zerocopy = { workspace = true }

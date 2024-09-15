@@ -1,7 +1,4 @@
-use std::{
-    path::{Path, PathBuf},
-    sync::Arc,
-};
+use std::{path::PathBuf, sync::Arc};
 
 use anyhow::Result;
 use half::f16;
@@ -88,7 +85,7 @@ impl EmbeddingModel {
 
 pub fn paragraphize(text: &str) -> Vec<Span<'_>> {
     let sentences = text
-        .match_indices(|c| c == '.' || c == '\n')
+        .match_indices(['.', '\n'])
         .map(|(i, mt)| Span {
             highlight: mt,
             start: i,
