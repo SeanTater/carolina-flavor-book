@@ -134,21 +134,27 @@ revision-list summary {
     font-weight: 600;
 }
 
-full-recipe h1,
-full-recipe h2 {
+full-recipe h1 {
     background-color: var(--primary-accent-color);
     color: var(--bright-color);
     padding: 1rem;
     border-radius: 0.4rem;
 }
 
+full-recipe h2 {
+    display: block;
+    margin: 1rem 0 1rem 0.5rem;
+    padding-left: 2rem;
+    border-left: 5px solid var(--primary-accent-color);
+}
+
+
 full-recipe h3,
 full-recipe h4,
 full-recipe h5,
-full-recipe h6,
-full-recipe strong {
+full-recipe h6 {
     display: block;
-    margin: 1rem 0;
+    margin: 1rem 0 1rem 1rem;
     padding-left: 2rem;
-    border-left: 5px solid var(--primary-accent-color);
+    border-left: 5px solid var(--dim-color);
 }
