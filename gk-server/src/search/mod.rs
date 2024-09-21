@@ -12,7 +12,7 @@ use crate::{
 };
 
 pub mod model;
-const LATEST_MODEL_NAME: &str = "snowflake-arctic-embed-xs-fp16";
+const LATEST_MODEL_NAME: &str = "snowflake-arctic-embed-xs-fp16-5sent";
 const EMBEDDING_SIZE: usize = 384;
 
 #[derive(Clone)]
@@ -178,7 +178,7 @@ impl DocumentIndexHandle {
     /// Find the most similar recipes to a query.
     ///
     /// Returns the top `k` most similar recipes to the query, along with their similarity scores.
-    pub fn search(&self, query: &str, k: usize) -> Result<Vec<Recipe>> {
+    pub fn search(&self, query: &str, skip: usize, take: usize) -> Result<Vec<Recipe>> {
         let query = self.embedder.embed_query(query)?;
         // Rather than locking the index for the whole operation, we just clone it once
         let index = self.index.read().unwrap().clone();
@@ -201,7 +201,8 @@ impl DocumentIndexHandle {
             .into_iter()
             .sorted_by(|a, b| b.1.partial_cmp(&a.1).unwrap())
             .filter_map(|(id, _sim)| Recipe::get_by_id(&self.db, id).ok().flatten())
-            .take(k)
+            .skip(skip)
+            .take(take)
             .collect())
     }
 

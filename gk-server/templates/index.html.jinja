@@ -1,0 +1,15 @@
+{% extends "base.html.jinja" %}
+{% block title %}Recipes of the day{% endblock %}
+{% block content %}
+<!-- Render all the recipes in a list -->
+<recipe-cards>
+    {% for recipe in recipes %}
+    <a href="/recipe/{{recipe.recipe_id}}">
+        <recipe-card>
+            <h4>{{recipe.name}}</h4>
+            <img src="{{recipe.thumbnail | to_data_url }}" alt="{{recipe.name}}">
+        </recipe-card>
+    </a>
+    {% endfor %}
+</recipe-cards>
+{% endblock %}

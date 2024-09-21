@@ -42,7 +42,7 @@ impl EmbeddingModel {
     pub fn embed<S: AsRef<str>>(&self, sentences: &[S], prefix: &str) -> Result<Vec<Vec<f16>>> {
         let sentences = sentences
             .iter()
-            .map(|s| format!("{}: {}", prefix, s.as_ref()))
+            .map(|s| format!("{}{}", prefix, s.as_ref()))
             .collect_vec();
         Ok(Self::truncate(self.model.embed(sentences, None)?))
     }
@@ -50,9 +50,7 @@ impl EmbeddingModel {
     /// Convenience method to embed a single query sentence with the default prefix for queries.
     pub fn embed_documents<S: AsRef<str>>(&self, documents: &[S]) -> Result<Vec<Vec<f16>>> {
         self.embed(
-            documents,
-            // This specific phrase is meaningful to BAAI/bge-small-en-v1.5
-            "search_document",
+            documents, "", // snowflake-arctic-embed-xs does not use a prefix for documents
         )
     }
 
@@ -61,8 +59,8 @@ impl EmbeddingModel {
         Ok(self
             .embed(
                 &[query],
-                // This specific phrase is meaningful to BAAI/bge-small-en-v1.5
-                "search_query",
+                // This specific phrase is meaningful to snowflake-arctic-embed-xs
+                "Represent this sentence for searching relevant passages: ",
             )?
             .pop()
             .unwrap())
@@ -84,17 +82,19 @@ impl EmbeddingModel {
 }
 
 pub fn paragraphize(text: &str) -> Vec<Span<'_>> {
-    let sentences = text
-        .match_indices(['.', '\n'])
-        .map(|(i, mt)| Span {
-            highlight: mt,
-            start: i,
-            end: i + mt.len(),
+    // Split the text into sentences at newlines, but consider multiple newlines as one.
+    let splitter = regex::Regex::new(r".*(\n+|$)").unwrap();
+    let sentences = splitter
+        .find_iter(text)
+        .map(|m| Span {
+            highlight: m.as_str(),
+            start: m.start(),
+            end: m.end(),
         })
         .collect_vec();
 
-    if sentences.len() < 4 {
-        // If there are less than 4 sentences, just return the whole text as a single paragraph.
+    if sentences.len() < 5 {
+        // If there are less than 5 sentences, just return the whole text as a single paragraph.
         return vec![Span {
             highlight: text,
             start: 0,
@@ -102,15 +102,24 @@ pub fn paragraphize(text: &str) -> Vec<Span<'_>> {
         }];
     }
 
-    let mut paragraphs = vec![
-        Span::concat(text, &sentences[0..3]),
-        Span::concat(text, &sentences[sentences.len() - 3..]),
-    ];
-    paragraphs.extend(
-        sentences
-            .windows(3)
-            .map(|window| Span::concat(text, window)),
-    );
+    let mut paragraphs = vec![];
+    let mut start = 0;
+    let mut end = 0;
+    let mut len = 0;
+    let TARGET_MAX_LEN = 1000;
+    let TARGET_MIN_LEN = 500;
+    // We want to get spans of about 1000 characters, but we don't want to split sentences.
+    while end < sentences.len() {
+        while len > TARGET_MIN_LEN && start < end {
+            start += 1;
+            len -= sentences[start].end - sentences[start].start;
+        }
+        while len < TARGET_MAX_LEN && end < sentences.len() {
+            len += sentences[end].end - sentences[end].start;
+            end += 1;
+        }
+        paragraphs.push(Span::concat(text, &sentences[start..end]));
+    }
     paragraphs
 }
 
@@ -120,9 +129,9 @@ pub struct Span<'t> {
     pub end: usize,
 }
 impl Span<'_> {
-    pub fn concat<'t>(original: &'t str, spans: &[Self]) -> Span<'t> {
-        let start = spans.iter().map(|s| s.start).min().unwrap_or(0);
-        let end = spans.iter().map(|s| s.end).max().unwrap_or(0);
+    pub fn concat<'t>(original: &'t str, spans: &[Span]) -> Span<'t> {
+        let start = spans.into_iter().map(|s| s.start).min().unwrap_or(0);
+        let end = spans.into_iter().map(|s| s.end).max().unwrap_or(0);
         Span {
             highlight: original.get(start..end).unwrap_or(""),
             start,

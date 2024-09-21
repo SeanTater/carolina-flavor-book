@@ -2,11 +2,12 @@ use anyhow::{Context, Result};
 use axum::{
     body::{self, Bytes},
     extract::{Path, State},
-    http::StatusCode,
+    http::{header, Response, StatusCode},
     response::{Html, IntoResponse, Redirect},
     routing::{get, post},
     Form, Json, Router,
 };
+use base64::Engine;
 use clap::Parser;
 use gk::basic_models;
 use gk_server::{
@@ -16,12 +17,35 @@ use gk_server::{
     models::{FullRecipe, Image, Recipe},
     search,
 };
-use handlebars::Handlebars;
+use minijinja::context;
 use serde::Deserialize;
-use serde_json::json;
+
+/// Convert a webp image to a data URL
+fn to_data_url(bytes: Option<Vec<u8>>) -> Option<String> {
+    bytes.map(|b| {
+        format!(
+            "data:image/webp;base64,{}",
+            // For the purpose of data urls, you do NOT need to use the URL_SAFE variant
+            base64::engine::general_purpose::STANDARD.encode(b)
+        )
+    })
+}
 
 lazy_static::lazy_static! {
-    static ref TEMPLATES: Handlebars<'static> = handlebars();
+    static ref TEMPLATES: minijinja::Environment<'static> = {
+        let mut env = minijinja::Environment::new();
+        for (name, template) in &[
+            ("index.html.jinja", include_str!("../templates/index.html.jinja")),
+            ("recipe.html.jinja", include_str!("../templates/recipe.html.jinja")),
+            ("search.html.jinja", include_str!("../templates/search.html.jinja")),
+            ("base.html.jinja", include_str!("../templates/base.html.jinja")),
+        ] {
+            env.add_template(name, template)
+                .expect("Failed to register template");
+        }
+        env.add_filter("to_data_url", to_data_url);
+        env
+    };
 }
 
 #[derive(Parser, Debug)]
@@ -77,6 +101,8 @@ async fn main() -> Result<()> {
             "/api/get-task/generate-image/:category",
             get(get_generate_image_task),
         )
+        // `GET /api/image/:image_id` goes to `get_image`
+        .route("/image/:image_id", get(get_image))
         // `POST /api/upload_image/:recipe_id/:category` goes to `upload_image`
         .route("/api/image/:recipe_id/:category", post(upload_image))
         // `POST /api/upload_recipe` goes to `upload_recipe`
@@ -118,29 +144,12 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-fn handlebars() -> Handlebars<'static> {
-    let mut reg = Handlebars::new();
-    reg.register_template_string("index", include_str!("templates/index.hbs"))
-        .unwrap();
-    reg.register_template_string("recipe", include_str!("templates/recipe.hbs"))
-        .unwrap();
-    reg.register_template_string("search", include_str!("templates/search.hbs"))
-        .unwrap();
-
-    // Register partials
-    reg.register_partial("header", include_str!("templates/header.hbs"))
-        .unwrap();
-    reg.register_partial("footer", include_str!("templates/footer.hbs"))
-        .unwrap();
-
-    reg
-}
-
 // Render the home page
 async fn root(State(allstates): State<AllStates>) -> WebResult<Html<String>> {
-    Ok(Html(TEMPLATES.render(
-        "index",
-        &json!({"recipes": Recipe::list_some(&allstates.db)?}),
+    Ok(Html(TEMPLATES.get_template("index.html.jinja")?.render(
+        context! {
+            recipes => Recipe::list_some(&allstates.db)?,
+        },
     )?))
 }
 
@@ -154,26 +163,42 @@ async fn get_recipe(
     Path(recipe_id): Path<i64>,
 ) -> WebResult<Html<String>> {
     let recipe = Recipe::get_full_recipe(&allstates.db, recipe_id)?.ok_or(WebError::NotFound)?;
-    Ok(Html(TEMPLATES.render("recipe", &recipe).unwrap()))
+    Ok(Html(TEMPLATES.get_template("recipe.html.jinja")?.render(
+        context! {
+            recipe => recipe,
+        },
+    )?))
 }
 
 #[derive(Debug, Deserialize)]
 struct SearchQuery {
     query: String,
+    #[serde(default)]
+    page: usize,
 }
 
 async fn search_recipes(
     State(allstates): State<AllStates>,
     Form(search_query): Form<SearchQuery>,
-) -> WebResult<Html<String>> {
-    let results = allstates.doc_index.search(&search_query.query, 20)?;
-    Ok(Html(TEMPLATES.render(
-        "search",
-        &json!({
-            "query": &search_query.query,
-            "results": results,
-        }),
+) -> WebResult<impl IntoResponse> {
+    let results = allstates
+        .doc_index
+        .search(&search_query.query, search_query.page * 20, 20)?;
+    Ok(Html(TEMPLATES.get_template("search.html.jinja")?.render(
+        context! {
+            query => search_query.query,
+            results => results,
+            page => search_query.page,
+        },
     )?))
+}
+
+async fn get_image(
+    State(allstates): State<AllStates>,
+    Path(image_id): Path<i64>,
+) -> WebResult<impl IntoResponse> {
+    let image = Image::get_image(&allstates.db, image_id)?.ok_or(WebError::NotFound)?;
+    Ok(([(header::CONTENT_TYPE, "image/webp")], image.content_bytes))
 }
 
 /// Get a recipe that does not have enough images, so that we can generate some AI-generated images for it.
@@ -229,6 +254,7 @@ async fn serve_static(Path(path): Path<String>) -> WebResult<impl IntoResponse> 
             Some("png") => "image/png",
             Some("jpg") | Some("jpeg") => "image/jpeg",
             Some("svg") => "image/svg+xml",
+            Some("webp") => "image/webp",
             _ => "application/octet-stream",
         },
     );

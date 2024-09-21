@@ -3,10 +3,16 @@
 }
 
 body {
+    --primary-color: #8E4A49;
+    --bright-color: #E7ECEF;
+    --dim-color: #bcc2c5;
+    --secondary-accent-color: #37718E;
+    --primary-accent-color: #659157;
+
     font-family: 'Roboto', sans-serif;
     margin: 0;
     padding: 0;
-    background-color: #fffbf3;
+    background: repeating-linear-gradient(-15deg, #353535 1rem, #303030 2rem, #353535 3rem);
 }
 
 a {
@@ -18,12 +24,17 @@ a:hover {
     color: #666;
 }
 
+hr {
+    border: 1px solid #ccc;
+}
 
 article,
 search-bar {
     margin: 0 auto 1rem auto;
     padding: 0.5rem 1rem;
     max-width: 1200px;
+    background-color: var(--bright-color);
+    border-radius: 0.4rem;
 }
 
 search-bar {
@@ -32,10 +43,13 @@ search-bar {
     justify-content: center;
     align-items: center;
     column-gap: 3rem;
-    /* Muted green */
-    background-color: #a0d0b1;
     /* Rounded corners only on the bottom */
     border-radius: 0 0 0.4rem 0.4rem;
+    background-color: var(--primary-accent-color);
+}
+
+search-bar h1 a {
+    color: var(--bright-color);
 }
 
 search-bar form {
@@ -53,7 +67,7 @@ search-bar input[type="text"] {
 recipe-cards,
 image-cards {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(450px, 1fr));
 }
 
 recipe-card,
@@ -95,13 +109,46 @@ ul.pills {
     padding: 0;
 }
 
-ul.pills>li {
+revision-list details {
+    display: inline-block;
+}
+
+revision-list details[open] {
+    display: block;
+    padding: 2vh 2vw;
+    background-color: var(--dim-color);
+    border-radius: 0.4rem;
+    font-family: monospace;
+    white-space: pre-line;
+}
+
+ul.pills>li,
+revision-list summary {
     display: inline-block;
     margin: 5px;
     padding: 5px 10px;
     border-radius: 0.4rem;
-    background-color: #0a69c2;
+    background-color: var(--primary-accent-color);
     color: #eeeeee;
     font-size: 0.8rem;
     font-weight: 600;
+}
+
+full-recipe h1,
+full-recipe h2 {
+    background-color: var(--primary-accent-color);
+    color: var(--bright-color);
+    padding: 1rem;
+    border-radius: 0.4rem;
+}
+
+full-recipe h3,
+full-recipe h4,
+full-recipe h5,
+full-recipe h6,
+full-recipe strong {
+    display: block;
+    margin: 1rem 0;
+    padding-left: 2rem;
+    border-left: 5px solid var(--primary-accent-color);
 }

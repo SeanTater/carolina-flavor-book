@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gallagher Kitchen</title>
+    <title>{% block title %}Home{% endblock %} | Gallagher Kitchen</title>
     <link rel="stylesheet" href="/static/index.css">
 </head>
 
@@ -17,3 +17,8 @@
         </form>
     </search-bar>
     <article>
+        {% block content %}{% endblock %}
+    </article>
+</body>
+
+</html>

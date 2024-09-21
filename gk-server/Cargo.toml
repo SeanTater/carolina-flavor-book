@@ -1,6 +1,6 @@
 [package]
 name = "gk-server"
-version = "0.2.0"
+version = "0.2.2"
 edition = "2021"
 
 [dependencies]
@@ -19,7 +19,6 @@ fastembed = { default-features = false, features = ["ort-download-binaries"], wo
 gk = { path = "../gk" }
 glob = { workspace = true }
 half = { features = ["serde", "zerocopy"], workspace = true }
-handlebars = { workspace = true }
 hex = { workspace = true }
 image = { workspace = true }
 imageproc = { workspace = true }
@@ -28,9 +27,11 @@ itertools = { workspace = true }
 lazy_static = { workspace = true }
 log = { workspace = true }
 markdown = { workspace = true }
+minijinja = "2.3.1"
 r2d2 = { workspace = true }# Server only
 r2d2_sqlite = { workspace = true }# Server only
 rand = { workspace = true }
+regex = "1.10.6"
 reqwest = { features = ["rustls-tls"], default-features = false, workspace = true }
 
 rten = { workspace = true }

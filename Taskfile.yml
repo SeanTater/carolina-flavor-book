@@ -31,7 +31,7 @@ tasks:
     cmds:
       - echo Pushing {{.VERSION}}
       # Push as this version
-      - docker push us-central1-docker.pkg.dev/telepathicpenguins/gk-container-images/gk-server:{{.VERSION}}'
+      - 'docker push us-central1-docker.pkg.dev/telepathicpenguins/gk-container-images/gk-server:{{.VERSION}}'
       # Push as latest
       - 'docker push us-central1-docker.pkg.dev/telepathicpenguins/gk-container-images/gk-server:latest'
   

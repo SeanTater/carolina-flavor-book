@@ -2,7 +2,6 @@ use std::fmt::Debug;
 
 use crate::database::{Database, FromRow};
 use anyhow::Result;
-use base64::Engine;
 use gk::basic_models;
 use half::f16;
 use rusqlite::params;
@@ -18,7 +17,7 @@ pub struct Recipe {
     pub recipe_id: i64,
     pub name: String,
     pub created_on: String,
-    pub thumbnail: Option<String>,
+    pub thumbnail: Option<Vec<u8>>,
 }
 
 impl FromRow for Recipe {
@@ -28,10 +27,7 @@ impl FromRow for Recipe {
             recipe_id: row.get("recipe_id")?,
             name: row.get("name")?,
             created_on: row.get("created_on")?,
-            thumbnail: row
-                .get("thumbnail")
-                .map(|b: Vec<u8>| webp_to_data_url(&b))
-                .ok(),
+            thumbnail: row.get("thumbnail").ok(),
         })
     }
 }
@@ -118,11 +114,21 @@ impl Recipe {
     /// Get all the details about a recipe
     pub fn get_full_recipe(db: &Database, recipe_id: i64) -> Result<Option<FullRecipe>> {
         let recipe = Self::get_by_id(db, recipe_id)?;
+        let revision_source_worst_to_best = ["name", "ocr", "llm", "manual"];
         if let Some(recipe) = recipe {
             let tags = recipe.get_tags(db)?;
             let images = recipe.get_images(db)?;
             let revisions = recipe.get_revisions(db)?;
-            let best_revision = revisions.iter().max_by_key(|r| &r.created_on).cloned();
+            let best_revision = revisions
+                .iter()
+                .max_by_key(|r| {
+                    // We want to pick one of these in order, picking anything else only as a last resort
+                    revision_source_worst_to_best
+                        .iter()
+                        .position(|x| r.source_name == *x)
+                        .unwrap_or_default()
+                })
+                .cloned();
             Ok(Some(FullRecipe {
                 recipe,
                 tags,
@@ -183,29 +189,12 @@ impl Tag {
     }
 }
 
-/// Convert a webp image to a data URL
-fn webp_to_data_url(bytes: &[u8]) -> String {
-    format!(
-        "data:image/webp;base64,{}",
-        // For the purpose of data urls, you do NOT need to use the URL_SAFE variant
-        base64::engine::general_purpose::STANDARD.encode(bytes)
-    )
-}
-
-/// Serialize a webp image to a data URL
-fn serialize_webp_to_data_url<S: Serializer>(bytes: &[u8], ser: S) -> Result<S::Ok, S::Error> {
-    ser.serialize_str(&webp_to_data_url(bytes))
-}
-
 #[derive(Debug, Serialize, Clone)]
 pub struct Image {
     pub image_id: i64,
     pub recipe_id: i64,
     pub category: String,
     pub format: String,
-    // This is a webp encoded image
-    // Store it as a data URL when rendering
-    #[serde(serialize_with = "serialize_webp_to_data_url")]
     pub content_bytes: Vec<u8>,
 }
 
@@ -222,6 +211,12 @@ impl FromRow for Image {
 }
 
 impl Image {
+    pub fn get_image(db: &Database, image_id: i64) -> Result<Option<Image>> {
+        Ok(db
+            .collect_rows("SELECT * FROM Image WHERE image_id = ?", params![image_id])?
+            .pop())
+    }
+
     pub fn push(db: &Database, recipe_id: i64, upload: basic_models::ImageForUpload) -> Result<()> {
         let conn = db.pool.get()?;
         // Do some rudimentary validation

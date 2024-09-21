@@ -1,0 +1,41 @@
+{% extends "base.html.jinja" %}
+
+{% block content %}
+<full-recipe>
+    <h1>{{ recipe.recipe.name }}</h1>
+
+    {{ recipe.best_revision.rendered }}
+
+</full-recipe>
+<hr>
+<h3> All Revisions </h3>
+<revision-list>
+    {% for revision in recipe.revisions %}
+    <details>
+        <summary>{{ revision.source_name }}</summary>
+        {{ revision.content_text }}
+    </details>
+    {% endfor %}
+</revision-list>
+<hr>
+<h3>Images</h3>
+<image-cards>
+    {% for image in recipe.images %}
+    <image-card>
+        <div>
+            Image type {{ image.category }}
+        </div>
+        <a href="/image/{{ image.image_id }}">
+            <img src="{{ image.content_bytes | to_data_url }}" alt="{{ loop.index }}">
+        </a>
+    </image-card>
+    {% endfor %}
+</image-cards>
+
+<h3>Tags</h3>
+<ul class="pills">
+    {% for tag in recipe.tags %}
+    <li>{{ tag.tag }}</li>
+    {% endfor %}
+</ul>
+{% endblock %}

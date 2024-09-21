@@ -10,8 +10,8 @@ pub type WebResult<T> = std::result::Result<T, WebError>;
 pub enum WebError {
     #[error("Internal Server Error: {0}")]
     InternalError(#[from] anyhow::Error),
-    #[error("Templating error: {0}")]
-    TemplateError(#[from] handlebars::RenderError),
+    #[error("Templating error: {0:#}")]
+    TemplateError(#[from] minijinja::Error),
     #[error("Authentication Failure")]
     AuthFailure(String),
     #[error("Not found")]
