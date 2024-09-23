@@ -48,6 +48,10 @@ search-bar {
     background-color: var(--primary-accent-color);
 }
 
+search-bar h1 {
+    margin: 0 1rem;
+}
+
 search-bar h1 a {
     color: var(--bright-color);
 }
@@ -66,8 +70,14 @@ search-bar input[type="text"] {
 
 recipe-cards,
 image-cards {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(450px, 1fr));
+    display: flex;
+    flex-wrap: wrap;
+}
+
+recipe-cards>a,
+image-cards>a {
+    display: block;
+    flex: min(75vw, 360px) 1;
 }
 
 recipe-card,
@@ -76,9 +86,8 @@ image-card {
     position: relative;
     border: 1px solid #ccc;
     border-radius: 5px;
-    margin: 10px;
-    min-width: 300px;
-    min-height: 300px;
+    margin: 1vw;
+    min-height: 250px;
 }
 
 recipe-card h4,

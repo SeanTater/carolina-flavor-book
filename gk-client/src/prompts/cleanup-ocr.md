@@ -1,4 +1,5 @@
-Reformat a basic recipe and add some additional information to make it more engaging and user-friendly. Respond with just the new recipe.
+Reformat a basic recipe and add some additional information to make it more engaging and user-friendly.
+Leave out brand names, trademarks, and links. Respond with just the new recipe.
 
 Use this example as a guide for formatting:
 (beginning of example)
@@ -48,8 +49,6 @@ Consider pairing it with a scoop of ice cream or a dollop of whipped cream, espe
 (end of example)
 
 ---
-
-**{name}**
 
 {content}
 

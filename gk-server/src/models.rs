@@ -5,7 +5,7 @@ use anyhow::Result;
 use gk::basic_models;
 use half::f16;
 use rusqlite::params;
-use serde::{Deserialize, Serialize, Serializer};
+use serde::{Deserialize, Serialize};
 use strum::{EnumString, IntoStaticStr};
 
 pub fn sqlite_current_timestamp() -> String {

@@ -5,14 +5,14 @@ edition = "2021"
 
 [dependencies]
 anyhow = { workspace = true }
-async-openai = { workspace = true } # Local only
+async-openai.workspace = true
 async-trait = { workspace = true }
 base64 = { workspace = true }
 bincode = { workspace = true }
 candle-core = { workspace = true }
 chrono = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
-dotenvy = { workspace = true }
+dotenvy.workspace = true
 env_logger = { workspace = true }
 fastembed = { workspace = true, default-features = false, features = ["ort-download-binaries"] }
 gk = { path = "../gk" }

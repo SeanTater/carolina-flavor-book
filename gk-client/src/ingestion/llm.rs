@@ -4,6 +4,18 @@ use async_openai::{
     config::OpenAIConfig, types::ChatCompletionRequestMessage,
     types::ChatCompletionRequestUserMessage, types::CreateChatCompletionRequestArgs,
 };
+
+lazy_static::lazy_static! {
+    pub(crate) static ref OpenAIClient: async_openai::Client<OpenAIConfig> = async_openai::Client::build(
+        Default::default(),
+        OpenAIConfig::new()
+            .with_api_key(
+                dotenvy::var("OPENAI_API_KEY")
+                .expect("Could not find OPENAI_API_KEY in the environment.")
+            ),
+        Default::default());
+}
+
 /// Calls the LLM one-shot API with a given prompt.
 ///
 /// This function takes a string `prompt` and calls the LLM model using the
@@ -16,11 +28,9 @@ use async_openai::{
 /// # Returns
 ///
 /// A `Result` containing the response from the LLM model, or an error if the call fails.
-pub async fn call_llm(prompt: &str, api_base: Option<&str>) -> Result<String> {
-    let config = OpenAIConfig::new().with_api_base(api_base.unwrap_or("http://localhost:11434/v1"));
-    let client = async_openai::Client::with_config(config);
+pub async fn call_llm(prompt: &str) -> Result<String> {
     let req_args = CreateChatCompletionRequestArgs::default()
-        .model("llama3.1")
+        .model("gpt-4o-mini")
         .messages([ChatCompletionRequestMessage::User(
             ChatCompletionRequestUserMessage {
                 content: prompt.into(),
@@ -28,7 +38,7 @@ pub async fn call_llm(prompt: &str, api_base: Option<&str>) -> Result<String> {
             },
         )])
         .build()?;
-    let text = client
+    let text = OpenAIClient
         .chat()
         .create(req_args)
         .await?
@@ -43,19 +53,19 @@ pub async fn call_llm(prompt: &str, api_base: Option<&str>) -> Result<String> {
 }
 
 /// Calls the LLM to improve a recipe with the default prompt
-pub async fn improve_recipe_with_llm(content_text: &str, api_base: Option<&str>) -> Result<String> {
+pub async fn improve_recipe_with_llm(content_text: &str) -> Result<String> {
     tracing::info!("Improving recipe ..");
     let prompt_template = include_str!("../prompts/cleanup-ocr.md");
-    call_llm(
-        &prompt_template.replace("{content}", content_text),
-        api_base,
-    )
-    .await
+    let prompt = prompt_template.replace("{content}", content_text);
+    tracing::debug!("Prompt: {}", prompt);
+    call_llm(&prompt).await
 }
 
 /// Calls the LLM to improve a recipe with the default prompt
-pub async fn freestyle(recipe_name: &str, api_base: Option<&str>) -> Result<String> {
+pub async fn freestyle(recipe_name: &str) -> Result<String> {
     tracing::info!("Creating a new recipe ..");
     let prompt_template = include_str!("../prompts/freestyle.md");
-    call_llm(&prompt_template.replace("{name}", recipe_name), api_base).await
+    let prompt = prompt_template.replace("{name}", recipe_name);
+    tracing::debug!("Prompt: {}", prompt);
+    call_llm(&prompt).await
 }

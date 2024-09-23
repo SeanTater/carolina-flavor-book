@@ -1,26 +1,27 @@
 use anyhow::Result;
+use async_openai::{config::OpenAIConfig, Client};
+use base64::Engine;
 use image::DynamicImage;
-use ocrs::ImageSource;
 
-lazy_static::lazy_static! {
-    static ref OCR_ENGINE: ocrs::OcrEngine = default_ocr_engine();
-}
+use anyhow::anyhow;
+use async_openai::types::{
+    ChatCompletionRequestMessageContentPartImageArgs,
+    ChatCompletionRequestMessageContentPartTextArgs, ChatCompletionRequestUserMessageArgs,
+    CreateChatCompletionRequestArgs, ImageDetail, ImageUrlArgs,
+};
 
-/// Load the default OCR engine. The models for this engine are embedded in the binary,
-/// so this function does not require any arguments or IO.
-fn default_ocr_engine() -> ocrs::OcrEngine {
-    let detector = include_bytes!("../../../models/text-detection.rten");
-    let recognizer = include_bytes!("../../../models/text-recognition.rten");
-    let detection_model =
-        rten::Model::load_static_slice(detector).expect("Failed to load detector model");
-    let recognition_model =
-        rten::Model::load_static_slice(recognizer).expect("Failed to load recognizer model");
-    let engine_params = ocrs::OcrEngineParams {
-        detection_model: Some(detection_model),
-        recognition_model: Some(recognition_model),
-        ..Default::default()
-    };
-    ocrs::OcrEngine::new(engine_params).expect("Unable to load OCR engine")
+use super::convert_to_webp;
+
+/// Convert a webp image to a data URL
+///
+/// This is duplicated between the client and server, but they are a little different.
+/// Thie one operates on borrowed slices because it makes more sense than options needed for minijinja filters.
+fn to_data_url(bytes: &[u8]) -> String {
+    format!(
+        "data:image/webp;base64,{}",
+        // For the purpose of data urls, you do NOT need to use the URL_SAFE variant
+        base64::engine::general_purpose::STANDARD.encode(bytes)
+    )
 }
 
 /// Performs OCR on a single image.
@@ -36,9 +37,46 @@ fn default_ocr_engine() -> ocrs::OcrEngine {
 /// # Returns
 ///
 /// A `Result` containing the extracted text as a string, or an error if OCR fails.
-pub fn read_text_from_image(img: &DynamicImage) -> Result<String> {
-    let img = img.clone().into_rgb8();
-    let src = ImageSource::from_bytes(img.as_raw(), img.dimensions())?;
-    let ocr_input = OCR_ENGINE.prepare_input(src)?;
-    OCR_ENGINE.get_text(&ocr_input)
+pub async fn read_text_from_image(img: &DynamicImage) -> Result<String> {
+    // This API supports DataURI images. So first we need to make this into WebP format, then base64, then wrap in a DataURI.
+    if (img.height() * img.width()) > 2 << 20 {
+        tracing::warn!(
+            "Image is probably larger than it needs to be. ({h}x{w}) Consider resizing.",
+            h = img.height(),
+            w = img.width()
+        );
+    }
+    let img_webp = convert_to_webp(img, 0.8)?;
+    let img_data_url = to_data_url(&img_webp);
+
+    let request = CreateChatCompletionRequestArgs::default()
+        .model("gpt-4o-mini")
+        .messages([ChatCompletionRequestUserMessageArgs::default()
+            .content(vec![
+                ChatCompletionRequestMessageContentPartTextArgs::default()
+                    .text("Read the text from this image.")
+                    .build()?
+                    .into(),
+                ChatCompletionRequestMessageContentPartImageArgs::default()
+                    .image_url(
+                        ImageUrlArgs::default()
+                            .url(img_data_url)
+                            .detail(ImageDetail::High)
+                            .build()?,
+                    )
+                    .build()?
+                    .into(),
+            ])
+            .build()?
+            .into()])
+        .build()?;
+    super::llm::OpenAIClient
+        .chat()
+        .create(request)
+        .await?
+        .choices[0]
+        .message
+        .content
+        .take()
+        .ok_or(anyhow!("No message content when requesting OCR."))
 }

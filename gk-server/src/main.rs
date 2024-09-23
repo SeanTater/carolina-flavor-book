@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use axum::{
     body::{self, Bytes},
     extract::{Path, State},
-    http::{header, Response, StatusCode},
+    http::{header, StatusCode},
     response::{Html, IntoResponse, Redirect},
     routing::{get, post},
     Form, Json, Router,
@@ -21,6 +21,8 @@ use minijinja::context;
 use serde::Deserialize;
 
 /// Convert a webp image to a data URL
+/// This is duplicated in the client and server, but the implementation is different.
+/// This one operates on owned options because that's much more convenient for minijinja filters.
 fn to_data_url(bytes: Option<Vec<u8>>) -> Option<String> {
     bytes.map(|b| {
         format!(

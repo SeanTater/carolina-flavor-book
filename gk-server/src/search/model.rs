@@ -106,15 +106,15 @@ pub fn paragraphize(text: &str) -> Vec<Span<'_>> {
     let mut start = 0;
     let mut end = 0;
     let mut len = 0;
-    let TARGET_MAX_LEN = 1000;
-    let TARGET_MIN_LEN = 500;
+    let target_max_len = 1000;
+    let target_min_len = 500;
     // We want to get spans of about 1000 characters, but we don't want to split sentences.
     while end < sentences.len() {
-        while len > TARGET_MIN_LEN && start < end {
+        while len > target_min_len && start < end {
             start += 1;
             len -= sentences[start].end - sentences[start].start;
         }
-        while len < TARGET_MAX_LEN && end < sentences.len() {
+        while len < target_max_len && end < sentences.len() {
             len += sentences[end].end - sentences[end].start;
             end += 1;
         }
@@ -130,8 +130,8 @@ pub struct Span<'t> {
 }
 impl Span<'_> {
     pub fn concat<'t>(original: &'t str, spans: &[Span]) -> Span<'t> {
-        let start = spans.into_iter().map(|s| s.start).min().unwrap_or(0);
-        let end = spans.into_iter().map(|s| s.end).max().unwrap_or(0);
+        let start = spans.iter().map(|s| s.start).min().unwrap_or(0);
+        let end = spans.iter().map(|s| s.end).max().unwrap_or(0);
         Span {
             highlight: original.get(start..end).unwrap_or(""),
             start,

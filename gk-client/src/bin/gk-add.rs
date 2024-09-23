@@ -1,5 +1,6 @@
 use anyhow::{ensure, Ok, Result};
 use clap::{Parser, ValueEnum};
+use dotenvy;
 use gk::basic_models;
 use gk_client::ingestion;
 
@@ -29,10 +30,11 @@ pub struct Args {
     /// Dry run mode: don't actually upload the recipe
     #[arg(long)]
     dry: bool,
-    /// LLM API base URL.
-    #[arg(long, default_value = "http://localhost:11434/v1")]
-    llm_api_base: String,
+    /// Directly upload a Revision with a specified source name, details, format, and content
+    #[arg(long, num_args(4))]
+    direct: Option<Vec<String>>,
 }
+
 #[derive(Parser, Debug, Clone, PartialEq, Eq, ValueEnum)]
 pub enum Rotate {
     R0,
@@ -44,14 +46,33 @@ pub enum Rotate {
 #[tokio::main]
 async fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
+    if dotenvy::dotenv().is_err() {
+        tracing::warn!("Failed to load .env file, so API keys are probably not available");
+    }
     let args = Args::parse();
 
-    let mut revisions = vec![];
+    let mut revisions = vec![basic_models::RevisionForUpload {
+        source_name: "name".to_string(),
+        content_text: args.name.clone(),
+        format: "text".to_string(),
+        details: None,
+    }];
     let mut images = vec![];
     let mut tags = args.tags;
     let mut best_input_text = None;
 
     println!("Recipe name: {}", args.name);
+
+    if let Some([source_name, details, format, content_text]) =
+        args.direct.as_ref().map(Vec::as_slice)
+    {
+        revisions.push(basic_models::RevisionForUpload {
+            source_name: source_name.clone(),
+            content_text: content_text.clone(),
+            format: format.clone(),
+            details: Some(details.clone()),
+        });
+    }
 
     if let Some(device_number) = args.webcam {
         println!("Webcam mode enabled");
@@ -63,7 +84,7 @@ async fn main() -> Result<()> {
             Rotate::R270 => picture.rotate270(),
         };
 
-        let content_text = ingestion::read_text_from_image(&picture)?;
+        let content_text = ingestion::read_text_from_image(&picture).await?;
 
         let webp_bytes = ingestion::convert_to_webp(&picture, 75.0)?;
         images.push(basic_models::ImageForUpload {
@@ -95,27 +116,26 @@ async fn main() -> Result<()> {
 
     if args.freestyle {
         println!("Freestyle mode enabled");
-        let better_text = ingestion::freestyle(&args.name, Some(&args.llm_api_base)).await?;
+        let better_text = ingestion::freestyle(&args.name).await?;
         best_input_text = Some(better_text.clone());
         revisions.push(basic_models::RevisionForUpload {
             source_name: "llm".to_string(),
             content_text: better_text,
             format: "markdown".to_string(),
-            details: Some("{\"model\": \"llama3.1\"}".to_string()),
+            details: Some("{\"model\": \"gpt-4o-mini\"}".to_string()),
         });
         tags.push("freestyle".to_string());
     }
 
     if let Some(content_text) = best_input_text {
         if !args.freestyle {
-            let better_text =
-                ingestion::improve_recipe_with_llm(&content_text, Some(&args.llm_api_base)).await?;
+            let better_text = ingestion::improve_recipe_with_llm(&content_text).await?;
 
             revisions.push(basic_models::RevisionForUpload {
                 source_name: "llm".to_string(),
                 content_text: better_text,
                 format: "markdown".to_string(),
-                details: Some("{\"model\": \"llama3.1\"}".to_string()),
+                details: Some("{\"model\": \"gpt-4o-mini\"}".to_string()),
             });
         }
     }
