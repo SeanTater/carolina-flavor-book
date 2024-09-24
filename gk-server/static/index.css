@@ -68,19 +68,16 @@ search-bar input[type="text"] {
     font-size: 1.2rem;
 }
 
-recipe-cards,
 image-cards {
     display: flex;
     flex-wrap: wrap;
 }
 
-recipe-cards>a,
 image-cards>a {
     display: block;
     flex: min(75vw, 360px) 1;
 }
 
-recipe-card,
 image-card {
     display: block;
     position: relative;
@@ -90,7 +87,6 @@ image-card {
     min-height: 250px;
 }
 
-recipe-card h4,
 image-card h4 {
     margin: 0;
     position: relative;
@@ -101,7 +97,6 @@ image-card h4 {
     padding: 0.35rem;
 }
 
-recipe-card img,
 image-card img {
     position: absolute;
     top: 0;
@@ -166,4 +161,24 @@ full-recipe h6 {
     margin: 1rem 0 1rem 1rem;
     padding-left: 2rem;
     border-left: 5px solid var(--dim-color);
+}
+
+ul.long-list {
+    column-count: auto;
+    column-width: min(20rem, 75vw);
+}
+
+nav {
+    margin: 1rem auto;
+    max-width: 250px;
+    background: var(--bright-color);
+    border-radius: 0.4rem;
+    display: flex;
+    font-size: 0.9rem;
+}
+
+nav>* {
+    padding: 0.25rem;
+    flex: 1;
+    text-align: center;
 }

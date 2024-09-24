@@ -6,20 +6,20 @@ Search results for "{{query}}"
 
 {% block content %}
 <h1>Search results for "{{query}}"</h1>
-<recipe-cards>
+<image-cards>
     {% for recipe in results %}
     <a href="/recipe/{{recipe.recipe_id}}">
-        <recipe-card>
+        <image-card>
             <h4>{{recipe.name}}</h4>
             {% if recipe.thumbnail %}
             <img src="{{recipe.thumbnail | to_data_url}}" alt="{{recipe.name}}">
             {% endif %}
-        </recipe-card>
+        </image-card>
     </a>
     {% else %}
     <p>No results found</p>
     {% endfor %}
-</recipe-cards>
+</image-cards>
 
 {% if page > 0 %}
 <a href="/search?query={{query}}&page={{page - 1}}">Previous page</a>

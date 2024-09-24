@@ -18,14 +18,11 @@
 <h3>Images</h3>
 <image-cards>
     {% for image in recipe.images %}
-    <image-card>
-        <div>
-            Image type {{ image.category }}
-        </div>
-        <a href="/image/{{ image.image_id }}">
+    <a href="/image/{{ image.image_id }}">
+        <image-card>
             <img src="{{ image.content_bytes | to_data_url }}" alt="{{ loop.index }}">
-        </a>
-    </image-card>
+        </image-card>
+    </a>
     {% endfor %}
 </image-cards>
 

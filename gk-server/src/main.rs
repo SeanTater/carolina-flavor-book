@@ -14,11 +14,13 @@ use gk_server::{
     auth::ServicePrincipal,
     database::Database,
     errors::{WebError, WebResult},
-    models::{FullRecipe, Image, Recipe},
+    models::{FullRecipe, Image, Recipe, Tag},
     search,
 };
 use minijinja::context;
+use rand::seq::SliceRandom;
 use serde::Deserialize;
+use tracing_subscriber::EnvFilter;
 
 /// Convert a webp image to a data URL
 /// This is duplicated in the client and server, but the implementation is different.
@@ -41,6 +43,7 @@ lazy_static::lazy_static! {
             ("recipe.html.jinja", include_str!("../templates/recipe.html.jinja")),
             ("search.html.jinja", include_str!("../templates/search.html.jinja")),
             ("base.html.jinja", include_str!("../templates/base.html.jinja")),
+            ("browse-by-tag.html.jinja", include_str!("../templates/browse-by-tag.html.jinja")),
         ] {
             env.add_template(name, template)
                 .expect("Failed to register template");
@@ -70,7 +73,20 @@ struct AllStates {
 #[tokio::main]
 async fn main() -> Result<()> {
     // initialize tracing
-    tracing_subscriber::fmt::init();
+    let file_appender = tracing_appender::rolling::daily(
+        if std::fs::exists("/app")? {
+            "/app/data/logs".into()
+        } else {
+            std::env::current_dir()?
+        },
+        "access.log",
+    );
+    let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
+    tracing_subscriber::fmt()
+        .json()
+        .with_writer(non_blocking)
+        .with_env_filter(EnvFilter::from_default_env())
+        .init();
 
     // Parse command line arguments
     let args = Args::parse();
@@ -92,6 +108,8 @@ async fn main() -> Result<()> {
     let app = Router::new()
         // `GET /` goes to `root`
         .route("/", get(root))
+        // `GET /browse/by-tag` goes to `browse_by_tag`
+        .route("/browse/by-tag", get(browse_by_tag))
         // `GET /health` goes to `health`
         .route("/health", get(health))
         // `GET /recipe/:recipe_id` goes to `get_recipe`
@@ -115,6 +133,7 @@ async fn main() -> Result<()> {
             tower_http::compression::CompressionLayer::new()
                 .quality(tower_http::CompressionLevel::Fastest),
         )
+        .layer(tower_http::trace::TraceLayer::new_for_http())
         .with_state(AllStates {
             db: default_db,
             doc_index: document_index.clone(),
@@ -146,13 +165,44 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-// Render the home page
+// Render the home page with 20 random recipes
 async fn root(State(allstates): State<AllStates>) -> WebResult<Html<String>> {
+    let all_recipes = Recipe::get_all_basics(&allstates.db)?;
+    let some_random_ids = all_recipes
+        .choose_multiple(&mut rand::thread_rng(), 20)
+        .map(|r| r.recipe_id)
+        .collect::<Vec<_>>();
     Ok(Html(TEMPLATES.get_template("index.html.jinja")?.render(
         context! {
-            recipes => Recipe::list_some(&allstates.db)?,
+            recipes => Recipe::get_extended(&allstates.db, &some_random_ids)?,
         },
     )?))
+}
+
+/// Render the browse page, which shows all the recipes for all the tags, grouped by tag,
+/// and two recipes per tag with highlights
+async fn browse_by_tag(State(allstates): State<AllStates>) -> WebResult<Html<String>> {
+    let tags = Tag::get_distinct(&allstates.db)?;
+    let mut recipes_by_tag = vec![];
+    for tag in tags {
+        let recipes = Recipe::get_by_tag(&allstates.db, &tag.tag)?;
+        let highlights = recipes
+            .choose_multiple(&mut rand::thread_rng(), 2)
+            .map(|r| r.recipe_id)
+            .collect::<Vec<_>>();
+        recipes_by_tag.push(context! {
+            tag => tag.tag,
+            highlight_recipes => Recipe::get_extended(&allstates.db, &highlights)?,
+            all_recipes => recipes
+        });
+    }
+    Ok(Html(
+        TEMPLATES
+            .get_template("browse-by-tag.html.jinja")?
+            .render(context! {
+                recipes_by_tag => recipes_by_tag,
+            })?,
+    ))
 }
 
 // Just reply that everything is okay

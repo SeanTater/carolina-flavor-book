@@ -33,16 +33,46 @@ impl FromRow for Recipe {
 }
 
 impl Recipe {
+    /// Get all the basic information about all the recipes in the database.
+    /// This doesn't join to get a thumbnail
+    pub fn get_all_basics(db: &Database) -> Result<Vec<Recipe>> {
+        db.collect_rows("SELECT * FROM Recipe", params![])
+    }
+
     /// List all the recipes in the database.
-    pub fn list_some(db: &Database) -> Result<Vec<Recipe>> {
-        let recipes: Vec<Recipe> = db.collect_rows("
-            SELECT *,
-                (SELECT content_bytes FROM Image WHERE recipe_id = Recipe.recipe_id ORDER BY category <> 'ai-01' LIMIT 1) AS thumbnail,
-                (SELECT group_concat(tag, ', ') FROM Tag WHERE recipe_id = Recipe.recipe_id) AS tags
-            FROM Recipe
-            ORDER BY random()
-            LIMIT 20
-        ", params![])?;
+    pub fn get_extended(db: &Database, ids: &[i64]) -> Result<Vec<Recipe>> {
+        let recipes: Vec<Recipe> = db.collect_rows(
+            "
+            WITH
+                some_recipes AS (
+                    -- Get some recipes
+                    SELECT value as recipe_id
+                    FROM json_each(?)
+                ),
+                best_image AS (
+                    -- Get an AI image, usually the latest one generated
+                    SELECT max(image_id) as image_id, recipe_id
+                    FROM some_recipes
+                    LEFT JOIN Image USING (recipe_id)
+                    WHERE category LIKE 'ai%'
+                    GROUP BY recipe_id
+                )
+            SELECT
+                recipe_id,
+                name,
+                created_on,
+                content_bytes AS thumbnail,
+                (SELECT group_concat(tag, ', ')
+                    FROM Tag
+                    WHERE recipe_id = Recipe.recipe_id
+                ) AS tags
+            FROM some_recipes
+            INNER JOIN Recipe USING (recipe_id)
+            LEFT JOIN best_image USING (recipe_id)
+            LEFT JOIN (SELECT image_id, content_bytes FROM Image) USING (image_id);
+        ",
+            params![serde_json::to_string(ids)?],
+        )?;
         Ok(recipes)
     }
 
@@ -81,6 +111,17 @@ impl Recipe {
                 params![recipe_id],
             )?
             .pop())
+    }
+
+    /// Get all recipes with a tag
+    pub fn get_by_tag(db: &Database, tag: &str) -> Result<Vec<Recipe>> {
+        db.collect_rows(
+            "SELECT *
+            FROM Recipe
+            LEFT JOIN Tag USING (recipe_id)
+            WHERE tag = ?",
+            params![tag],
+        )
     }
 
     /// Get a recipe that doesn't have enough images for a given category.
@@ -141,6 +182,18 @@ impl Recipe {
         }
     }
 
+    /// Browse the recipes by tag
+    pub fn browse_by_tag(db: &Database, tag: &str) -> Result<Vec<Recipe>> {
+        db.collect_rows(
+            "SELECT Recipe.*, content_bytes AS thumbnail
+            FROM Recipe
+            LEFT JOIN Tag USING (recipe_id)
+            LEFT JOIN Image ON Recipe.recipe_id = Image.recipe_id AND Image.category = 'thumbnail'
+            WHERE Tag.tag = ?",
+            params![tag],
+        )
+    }
+
     /// Add a new recipe to the database
     pub fn push(db: &Database, upload: basic_models::RecipeForUpload) -> Result<i64> {
         let conn = db.pool.get()?;
@@ -186,6 +239,12 @@ impl Tag {
             params![recipe_id, tag],
         )?;
         Ok(())
+    }
+
+    /// Get all the distinct tags in the database
+    /// Recipe ID is set to 0
+    pub fn get_distinct(db: &Database) -> Result<Vec<Tag>> {
+        db.collect_rows("SELECT 0 recipe_id, tag FROM Tag GROUP BY tag", params![])
     }
 }
 

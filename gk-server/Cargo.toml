@@ -1,6 +1,6 @@
 [package]
 name = "gk-server"
-version = "0.2.3"
+version = "0.2.4"
 edition = "2021"
 
 [dependencies]
@@ -45,9 +45,10 @@ thiserror = { workspace = true }
 tokio = { features = ["full"], workspace = true }
 tokio-retry = { workspace = true }
 
-tower-http = { features = ["compression-br"], workspace = true }# Server only
+tower-http = { features = ["compression-br", "trace"], workspace = true }# Server only
 tracing = { workspace = true }
-tracing-subscriber = { workspace = true }
+tracing-appender = "0.2.3"
+tracing-subscriber = { features = ["json", "env-filter", "tracing-log"], workspace = true }
 url-escape = { workspace = true }
 
 webp = { workspace = true }
