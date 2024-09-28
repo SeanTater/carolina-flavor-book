@@ -1,6 +1,6 @@
 [package]
 name = "gk-server"
-version = "0.2.4"
+version = "0.2.5"
 edition = "2021"
 
 [dependencies]
@@ -28,6 +28,7 @@ lazy_static = { workspace = true }
 log = { workspace = true }
 markdown = { workspace = true }
 minijinja = "2.3.1"
+quick_cache = "0.6.9"
 r2d2 = { workspace = true }# Server only
 r2d2_sqlite = { workspace = true }# Server only
 rand = { workspace = true }

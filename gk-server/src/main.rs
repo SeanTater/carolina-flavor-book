@@ -12,9 +12,10 @@ use clap::Parser;
 use gk::basic_models;
 use gk_server::{
     auth::ServicePrincipal,
+    cache::{new_cache, CacheQuery, CacheValue, GKCache},
     database::Database,
     errors::{WebError, WebResult},
-    models::{FullRecipe, Image, Recipe, Tag},
+    models::{FullRecipe, Image, Recipe},
     search,
 };
 use minijinja::context;
@@ -68,10 +69,12 @@ struct Args {
 struct AllStates {
     db: Database,
     doc_index: search::DocumentIndexHandle,
+    cache: GKCache,
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    dotenvy::dotenv().ok();
     // initialize tracing
     let file_appender = tracing_appender::rolling::daily(
         if std::fs::exists("/app")? {
@@ -137,6 +140,7 @@ async fn main() -> Result<()> {
         .with_state(AllStates {
             db: default_db,
             doc_index: document_index.clone(),
+            cache: new_cache(),
         });
 
     // In development, use HTTP. In production, use HTTPS.
@@ -182,27 +186,39 @@ async fn root(State(allstates): State<AllStates>) -> WebResult<Html<String>> {
 /// Render the browse page, which shows all the recipes for all the tags, grouped by tag,
 /// and two recipes per tag with highlights
 async fn browse_by_tag(State(allstates): State<AllStates>) -> WebResult<Html<String>> {
-    let tags = Tag::get_distinct(&allstates.db)?;
-    let mut recipes_by_tag = vec![];
-    for tag in tags {
-        let recipes = Recipe::get_by_tag(&allstates.db, &tag.tag)?;
-        let highlights = recipes
-            .choose_multiple(&mut rand::thread_rng(), 2)
-            .map(|r| r.recipe_id)
-            .collect::<Vec<_>>();
-        recipes_by_tag.push(context! {
-            tag => tag.tag,
-            highlight_recipes => Recipe::get_extended(&allstates.db, &highlights)?,
-            all_recipes => recipes
-        });
+    match allstates
+        .cache
+        .get_value_or_guard_async(&CacheQuery::TagSearchPage)
+        .await
+    {
+        Ok(CacheValue::TagSearchPage { page }) => Ok(Html(page.clone())),
+        Ok(_) => unreachable!(),
+        Err(guard) => {
+            tracing::info!("Building browse by tag page");
+            let mut recipes_by_tag = vec![];
+            for (tag_name, results) in allstates.doc_index.search_tags()? {
+                let highlights = results
+                    .choose_multiple(&mut rand::thread_rng(), 2)
+                    .map(|r| r.recipe.recipe_id)
+                    .collect::<Vec<_>>();
+                recipes_by_tag.push(context! {
+                    tag_name => tag_name,
+                    highlight_recipes => Recipe::get_extended(&allstates.db, &highlights)?,
+                    all_recipes => results
+                });
+            }
+            let page = TEMPLATES
+                .get_template("browse-by-tag.html.jinja")?
+                .render(context! {
+                    recipes_by_tag => recipes_by_tag,
+                })?;
+            guard
+                .insert(CacheValue::TagSearchPage { page: page.clone() })
+                .unwrap_or_default();
+
+            Ok(Html(page))
+        }
     }
-    Ok(Html(
-        TEMPLATES
-            .get_template("browse-by-tag.html.jinja")?
-            .render(context! {
-                recipes_by_tag => recipes_by_tag,
-            })?,
-    ))
 }
 
 // Just reply that everything is okay

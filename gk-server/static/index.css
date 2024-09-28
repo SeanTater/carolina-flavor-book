@@ -182,3 +182,17 @@ nav>* {
     flex: 1;
     text-align: center;
 }
+
+search-relevance {
+    background: linear-gradient(90deg,
+            var(--primary-accent-color) 0%,
+            var(--primary-accent-color) calc(100*var(--relevance)),
+            #333 calc(100 * var(--relevance)),
+            #333 100%);
+    position: absolute;
+    bottom: 0;
+    width: 100%;
+    height: 0.5rem;
+    border-radius: 0 0 5px 5px;
+    z-index: 1;
+}

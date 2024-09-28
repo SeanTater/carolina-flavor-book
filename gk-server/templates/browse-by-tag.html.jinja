@@ -3,7 +3,7 @@
 {% block content %}
 {% for group in recipes_by_tag %}
 {# Show a few example images from recipes in this tag #}
-<h2>{{group.tag}}</h2>
+<h2>{{group.tag_name}}</h2>
 <image-cards>
     {% for recipe in group.highlight_recipes %}
     <a href="/recipe/{{recipe.recipe_id}}">
@@ -15,8 +15,8 @@
     {% endfor %}
 </image-cards>
 <ul class="long-list">
-    {% for recipe in group.all_recipes %}
-    <li><a href="/recipe/{{recipe.recipe_id}}">{{recipe.name}}</a></li>
+    {% for search_result in group.all_recipes %}
+    <li><a href="/recipe/{{search_result.recipe.recipe_id}}">{{search_result.recipe.name}}</a></li>
     {% endfor %}
 </ul>
 {% if not loop.last %}

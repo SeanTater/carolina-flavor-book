@@ -6,8 +6,6 @@ use half::f16;
 use fastembed::{InitOptions, TextEmbedding, TokenizerFiles, UserDefinedEmbeddingModel};
 use itertools::Itertools;
 
-use super::EMBEDDING_SIZE;
-
 #[derive(Clone)]
 pub struct EmbeddingModel {
     model: Arc<TextEmbedding>,
@@ -44,7 +42,12 @@ impl EmbeddingModel {
             .iter()
             .map(|s| format!("{}{}", prefix, s.as_ref()))
             .collect_vec();
-        Ok(Self::truncate(self.model.embed(sentences, None)?))
+        Ok(self
+            .model
+            .embed(sentences, None)?
+            .into_iter()
+            .map(|e| e.iter().copied().map(f16::from_f32).collect_vec())
+            .collect())
     }
 
     /// Convenience method to embed a single query sentence with the default prefix for queries.
@@ -55,29 +58,15 @@ impl EmbeddingModel {
     }
 
     /// Convenience method to embed a single query sentence with the default prefix for queries.
-    pub fn embed_query(&self, query: &str) -> Result<Vec<f16>> {
+    pub fn embed_queries<S: AsRef<str>>(&self, query: &[S]) -> Result<Vec<f16>> {
         Ok(self
             .embed(
-                &[query],
+                query,
                 // This specific phrase is meaningful to snowflake-arctic-embed-xs
                 "Represent this sentence for searching relevant passages: ",
             )?
             .pop()
             .unwrap())
-    }
-
-    /// Convert a vector of f32 embeddings into a vector of f16 embeddings and truncate it to 64 elements.
-    /// This is useful for storing embeddings in a database, to save space in trade for som eloss in accuracy.
-    pub fn truncate(embeddings: Vec<Vec<f32>>) -> Vec<Vec<f16>> {
-        embeddings
-            .into_iter()
-            .map(|e| {
-                e.into_iter()
-                    .take(EMBEDDING_SIZE)
-                    .map(f16::from_f32)
-                    .collect()
-            })
-            .collect()
     }
 }
 

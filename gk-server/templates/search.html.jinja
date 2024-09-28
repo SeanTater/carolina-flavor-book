@@ -7,13 +7,15 @@ Search results for "{{query}}"
 {% block content %}
 <h1>Search results for "{{query}}"</h1>
 <image-cards>
-    {% for recipe in results %}
-    <a href="/recipe/{{recipe.recipe_id}}">
+    {% for search_result in results %}
+    <a href="/recipe/{{search_result.recipe.recipe_id}}">
         <image-card>
-            <h4>{{recipe.name}}</h4>
-            {% if recipe.thumbnail %}
-            <img src="{{recipe.thumbnail | to_data_url}}" alt="{{recipe.name}}">
+            <h4>{{search_result.recipe.name}}</h4>
+            {% if search_result.recipe.thumbnail %}
+            <img src="{{search_result.recipe.thumbnail | to_data_url}}" alt="{{search_result.recipe.name}}">
             {% endif %}
+            <search-relevance style="--relevance: {{search_result.relevance}}%;"
+                title="{{search_result.relevance_percent}}% similar"></search-relevance>
         </image-card>
     </a>
     {% else %}

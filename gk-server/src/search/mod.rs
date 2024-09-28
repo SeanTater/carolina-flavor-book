@@ -1,6 +1,7 @@
 use anyhow::{ensure, Result};
 use half::f16;
 use model::EmbeddingModel;
+use serde::Serialize;
 use std::sync::RwLock;
 use std::{collections::HashMap, sync::Arc, time::Duration};
 
@@ -12,7 +13,7 @@ use crate::{
 };
 
 pub mod model;
-const LATEST_MODEL_NAME: &str = "snowflake-arctic-embed-xs-fp16-5sent";
+const LATEST_MODEL_NAME: &str = "arctic-xs-fp16-1kb-l2";
 const EMBEDDING_SIZE: usize = 384;
 
 #[derive(Clone)]
@@ -178,8 +179,8 @@ impl DocumentIndexHandle {
     /// Find the most similar recipes to a query.
     ///
     /// Returns the top `k` most similar recipes to the query, along with their similarity scores.
-    pub fn search(&self, query: &str, skip: usize, take: usize) -> Result<Vec<Recipe>> {
-        let query = self.embedder.embed_query(query)?;
+    pub fn search(&self, query: &str, skip: usize, take: usize) -> Result<Vec<SearchResult>> {
+        let query = self.embedder.embed_queries(&[query])?;
         // Rather than locking the index for the whole operation, we just clone it once
         let index = self.index.read().unwrap().clone();
         let query =
@@ -200,10 +201,106 @@ impl DocumentIndexHandle {
         Ok(best_by_recipe
             .into_iter()
             .sorted_by(|a, b| b.1.partial_cmp(&a.1).unwrap())
-            .filter_map(|(id, _sim)| Recipe::get_by_id(&self.db, id).ok().flatten())
+            .filter_map(|(id, similarity)| {
+                let relevance = (4.0 * (f32::from(similarity) - 0.5)).clamp(0.0, 1.0);
+                Some(SearchResult {
+                    recipe: Recipe::get_by_id(&self.db, id).ok().flatten()?,
+                    relevance,
+                    relevance_percent: (relevance * 100.0).round() as i32,
+                })
+            })
             .skip(skip)
             .take(take)
             .collect())
+    }
+
+    pub fn search_tags(&self) -> Result<Vec<(String, Vec<SearchResult>)>> {
+        let possible_tags = &[
+            // Meals
+            "breakfast",
+            "lunch",
+            "dinner",
+            "snack",
+            "dessert",
+            // Diets
+            "vegetarian",
+            "vegan",
+            "gluten-free",
+            "dairy-free",
+            "low-carb",
+            "low-fat",
+            "low-sugar",
+            "low-sodium",
+            "low-protein",
+            "high-protein",
+            "high-fiber",
+            // Cuisines
+            "american",
+            "italian",
+            "mexican",
+            "chinese",
+            "indian",
+            "japanese",
+            "french",
+            "thai",
+            "greek",
+            "mediterranean",
+            "spanish",
+            "korean",
+            // Ingredients
+            "chicken",
+            "beef",
+            "pork",
+            "seafood",
+            "vegetables",
+            "pasta",
+            "rice",
+            "potatoes",
+            "beans",
+            "cheese",
+            // Occasions
+            "party",
+            "picnic",
+            "potluck",
+            "barbecue",
+            "camping",
+            "tailgating",
+            "birthday",
+            // Holidays
+            "holiday",
+            "christmas",
+            "easter",
+            "halloween",
+            "thanksgiving",
+            "valentines",
+            "independence-day",
+            "st-patricks-day",
+            // Cooking methods
+            "grilling",
+            "baking",
+            "roasting",
+            "slow-cooker",
+            "pressure-cooker",
+            "air-fryer",
+            // Time allowances
+            "quick",
+            "easy",
+            "make-ahead",
+            "freezer-friendly",
+            "one-pot",
+        ];
+        let mut all_results = vec![];
+        for tag in possible_tags {
+            let results = self
+                .search(tag, 0, 100)?
+                .into_iter()
+                .filter(|r| r.relevance > 0.5)
+                .collect_vec();
+            if !results.is_empty() {
+                all_results.push((tag.to_string(), results));
+            }
+        }
+        Ok(all_results)
     }
 
     /// Replace the current index with a new index.
@@ -233,4 +330,11 @@ impl DocumentIndexHandle {
         *self.index.write().unwrap() = Arc::new(index);
         Ok(())
     }
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct SearchResult {
+    pub recipe: Recipe,
+    pub relevance: f32,
+    pub relevance_percent: i32,
 }
