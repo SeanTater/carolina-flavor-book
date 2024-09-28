@@ -1,6 +1,8 @@
 #!/bin/bash
 gcloud auth configure-docker
 docker pull us-central1-docker.pkg.dev/telepathicpenguins/gk-container-images/gk-server:latest
+docker stop gk-server
+docker rm gk-server
 docker run \
     -d \
     --name gk-server \

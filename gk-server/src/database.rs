@@ -1,14 +1,18 @@
 use anyhow::Result;
+// use google_cloud_storage::client::{Client, ClientConfig};
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct Database {
     pub pool: r2d2::Pool<r2d2_sqlite::SqliteConnectionManager>,
+    // pub gcs_client: Client,
 }
 
 impl Database {
     pub async fn connect_default() -> Result<Self> {
         let manager = r2d2_sqlite::SqliteConnectionManager::file("data/recipes.db");
         let pool = r2d2::Pool::new(manager)?;
+        // let config = ClientConfig::default().with_auth().await.unwrap();
+        // let gcs_client = Client::new(config);
         let me = Self { pool };
         me.migrate().await?;
         Ok(me)
@@ -55,6 +59,11 @@ impl Database {
         rows.mapped(T::from_row)
             .map(|r| r.map_err(Into::into))
             .collect::<Result<_>>()
+    }
+
+    /// Pull a whole table into memory.
+    pub fn collect_table<T: FromRow>(&self, table: &str) -> Result<Vec<T>> {
+        self.collect_rows(&format!("SELECT * FROM {}", table), [])
     }
 }
 

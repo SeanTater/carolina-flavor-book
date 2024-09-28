@@ -13,3 +13,4 @@ initial-setup
 .fastembed_cache
 .pytest_cache
 .env
+access.log*

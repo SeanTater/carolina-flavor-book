@@ -61,3 +61,4 @@ rustronomy-watershed = { git = "https://github.com/SeanTater/rustronomy-watershe
 
 tempfile = { version = "3.12.0" } # Local only
 v4l = { version = "0.14.0" } # Local only
+google-cloud-storage = { version = "0.22.1", default-features=false, features=["auth", "rustls-tls", "google-cloud-auth", "google-cloud-metadata"]}

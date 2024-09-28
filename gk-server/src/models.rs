@@ -17,7 +17,7 @@ pub struct Recipe {
     pub recipe_id: i64,
     pub name: String,
     pub created_on: String,
-    pub thumbnail: Option<Vec<u8>>,
+    pub thumbnail_image_id: Option<i64>,
 }
 
 impl FromRow for Recipe {
@@ -27,7 +27,7 @@ impl FromRow for Recipe {
             recipe_id: row.get("recipe_id")?,
             name: row.get("name")?,
             created_on: row.get("created_on")?,
-            thumbnail: row.get("thumbnail").ok(),
+            thumbnail_image_id: row.get("thumbnail_image_id").ok(),
         })
     }
 }
@@ -61,15 +61,14 @@ impl Recipe {
                 recipe_id,
                 name,
                 created_on,
-                content_bytes AS thumbnail,
+                image_id AS thumbnail_image_id,
                 (SELECT group_concat(tag, ', ')
                     FROM Tag
                     WHERE recipe_id = Recipe.recipe_id
                 ) AS tags
             FROM some_recipes
             INNER JOIN Recipe USING (recipe_id)
-            LEFT JOIN best_image USING (recipe_id)
-            LEFT JOIN (SELECT image_id, content_bytes FROM Image) USING (image_id);
+            LEFT JOIN best_image USING (recipe_id);
         ",
             params![serde_json::to_string(ids)?],
         )?;
@@ -87,7 +86,7 @@ impl Recipe {
     /// Get all the images for a recipe
     pub fn get_images(&self, db: &Database) -> Result<Vec<Image>> {
         db.collect_rows(
-            "SELECT * FROM Image WHERE recipe_id = ?",
+            "SELECT image_id, recipe_id, category, format FROM Image WHERE recipe_id = ?",
             params![self.recipe_id],
         )
     }
@@ -105,7 +104,7 @@ impl Recipe {
         Ok(db
             .collect_rows(
                 "SELECT *,
-                    (SELECT content_bytes FROM Image WHERE recipe_id = Recipe.recipe_id ORDER BY category LIMIT 1) AS thumbnail
+                    (SELECT max(image_id) FROM Image WHERE recipe_id = Recipe.recipe_id) AS thumbnail_image_id
                     FROM Recipe
                     WHERE Recipe.recipe_id = ?",
                 params![recipe_id],
@@ -182,18 +181,6 @@ impl Recipe {
         }
     }
 
-    /// Browse the recipes by tag
-    pub fn browse_by_tag(db: &Database, tag: &str) -> Result<Vec<Recipe>> {
-        db.collect_rows(
-            "SELECT Recipe.*, content_bytes AS thumbnail
-            FROM Recipe
-            LEFT JOIN Tag USING (recipe_id)
-            LEFT JOIN Image ON Recipe.recipe_id = Image.recipe_id AND Image.category = 'thumbnail'
-            WHERE Tag.tag = ?",
-            params![tag],
-        )
-    }
-
     /// Add a new recipe to the database
     pub fn push(db: &Database, upload: basic_models::RecipeForUpload) -> Result<i64> {
         let conn = db.pool.get()?;
@@ -254,7 +241,6 @@ pub struct Image {
     pub recipe_id: i64,
     pub category: String,
     pub format: String,
-    pub content_bytes: Vec<u8>,
 }
 
 impl FromRow for Image {
@@ -264,7 +250,6 @@ impl FromRow for Image {
             recipe_id: row.get("recipe_id")?,
             category: row.get("category")?,
             format: row.get("format")?,
-            content_bytes: row.get("content_bytes")?,
         })
     }
 }
@@ -272,7 +257,10 @@ impl FromRow for Image {
 impl Image {
     pub fn get_image(db: &Database, image_id: i64) -> Result<Option<Image>> {
         Ok(db
-            .collect_rows("SELECT * FROM Image WHERE image_id = ?", params![image_id])?
+            .collect_rows(
+                "SELECT image_id, recipe_id, category, format FROM Image WHERE image_id = ?",
+                params![image_id],
+            )?
             .pop())
     }
 
@@ -302,6 +290,30 @@ impl Image {
             params![recipe_id, upload.category, &content_bytes[..]],
         )?;
         Ok(())
+    }
+}
+
+#[derive(Debug, Serialize, Clone)]
+pub struct ImageContent {
+    pub image_id: i64,
+    pub content_bytes: Vec<u8>,
+}
+impl FromRow for ImageContent {
+    fn from_row(row: &rusqlite::Row) -> rusqlite::Result<Self> {
+        Ok(Self {
+            image_id: row.get("image_id")?,
+            content_bytes: row.get("content_bytes")?,
+        })
+    }
+}
+impl ImageContent {
+    pub fn get_image_content(db: &Database, image_id: i64) -> Result<Option<ImageContent>> {
+        Ok(db
+            .collect_rows(
+                "SELECT image_id, content_bytes FROM Image WHERE image_id = ?",
+                params![image_id],
+            )?
+            .pop())
     }
 }
 

@@ -15,7 +15,7 @@ use gk_server::{
     cache::{new_cache, CacheQuery, CacheValue, GKCache},
     database::Database,
     errors::{WebError, WebResult},
-    models::{FullRecipe, Image, Recipe},
+    models::{FullRecipe, Image, ImageContent, Recipe},
     search,
 };
 use minijinja::context;
@@ -265,7 +265,8 @@ async fn get_image(
     State(allstates): State<AllStates>,
     Path(image_id): Path<i64>,
 ) -> WebResult<impl IntoResponse> {
-    let image = Image::get_image(&allstates.db, image_id)?.ok_or(WebError::NotFound)?;
+    let image =
+        ImageContent::get_image_content(&allstates.db, image_id)?.ok_or(WebError::NotFound)?;
     Ok(([(header::CONTENT_TYPE, "image/webp")], image.content_bytes))
 }
 

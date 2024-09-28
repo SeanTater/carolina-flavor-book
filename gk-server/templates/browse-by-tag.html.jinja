@@ -9,7 +9,8 @@
     <a href="/recipe/{{recipe.recipe_id}}">
         <image-card>
             <h4>{{recipe.name}}</h4>
-            <img src="{{recipe.thumbnail | to_data_url }}" alt="{{recipe.name}}">
+            <img src="https://storage.googleapis.com/kibitz-prod/gallagher-kitchen/images/{{recipe.thumbnail_image_id}}.webp"
+                alt="{{recipe.name}}" loading="lazy">
         </image-card>
     </a>
     {% endfor %}
