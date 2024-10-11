@@ -182,7 +182,7 @@ impl Recipe {
     }
 
     /// Add a new recipe to the database
-    pub fn push(db: &Database, upload: basic_models::RecipeForUpload) -> Result<i64> {
+    pub async fn push(db: &Database, upload: basic_models::RecipeForUpload) -> Result<i64> {
         let conn = db.pool.get()?;
         conn.execute(
             "INSERT INTO Recipe (name, created_on) VALUES (?, ?)",
@@ -196,7 +196,7 @@ impl Recipe {
             Revision::push(db, revision, recipe_id)?;
         }
         for image in upload.images {
-            Image::push(db, recipe_id, image)?;
+            Image::push(db, recipe_id, image).await?;
         }
         Ok(recipe_id)
     }
@@ -264,7 +264,11 @@ impl Image {
             .pop())
     }
 
-    pub fn push(db: &Database, recipe_id: i64, upload: basic_models::ImageForUpload) -> Result<()> {
+    pub async fn push(
+        db: &Database,
+        recipe_id: i64,
+        upload: basic_models::ImageForUpload,
+    ) -> Result<()> {
         let conn = db.pool.get()?;
         // Do some rudimentary validation
         anyhow::ensure!(
@@ -281,14 +285,23 @@ impl Image {
             img
         };
         // Encode it back to webp. image::DynamicImage doesn't offer lossy webp, but "webp" does.
+        // Also, we need to force this .to_vec() immediately because the WebPMemory taht encode() returns
+        // is !Send and !Sync, so we can't hold it across an await point.
         let content_bytes = webp::Encoder::from_image(&img)
             .map_err(|e| anyhow::anyhow!("WebP encoding error: {:?}", e))?
-            .encode(75.0);
+            .encode(75.0)
+            .to_vec();
+
         conn.execute(
-            "INSERT INTO Image (recipe_id, category, format, content_bytes)
-            VALUES (?, ?, 'webp', ?)",
+            "INSERT INTO Image (recipe_id, category, format)
+            VALUES (?, ?, 'webp')",
             params![recipe_id, upload.category, &content_bytes[..]],
         )?;
+
+        // Upload the image to GCS
+        db.storage
+            .upload_image(conn.last_insert_rowid(), content_bytes.to_vec())
+            .await?;
         Ok(())
     }
 }

@@ -1,13 +1,9 @@
 use anyhow::{anyhow, ensure, Result};
 use image::DynamicImage;
 use tokio::process::Command;
-mod llm;
 mod ocr;
 mod webcam;
 
-pub use llm::call_llm;
-pub use llm::freestyle;
-pub use llm::improve_recipe_with_llm;
 pub use ocr::read_text_from_image;
 pub use webcam::take_picture;
 

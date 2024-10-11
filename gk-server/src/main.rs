@@ -296,7 +296,8 @@ async fn upload_image(
             category,
             content_bytes: image_bytes.to_vec(),
         },
-    )?;
+    )
+    .await?;
     Ok(StatusCode::OK)
 }
 
@@ -307,7 +308,7 @@ async fn upload_recipe(
     body: Bytes,
 ) -> WebResult<Redirect> {
     let recipe_upload = bincode::deserialize(&body[..]).context("Deserializing recipe")?;
-    let recipe_id = Recipe::push(&allstates.db, recipe_upload)?;
+    let recipe_id = Recipe::push(&allstates.db, recipe_upload).await?;
     Ok(Redirect::to(&format!("/recipe/{}", recipe_id)))
 }
 

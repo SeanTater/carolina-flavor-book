@@ -1,19 +1,18 @@
+use crate::storage::StorageClient;
 use anyhow::Result;
-// use google_cloud_storage::client::{Client, ClientConfig};
 
 #[derive(Clone)]
 pub struct Database {
     pub pool: r2d2::Pool<r2d2_sqlite::SqliteConnectionManager>,
-    // pub gcs_client: Client,
+    pub storage: StorageClient,
 }
 
 impl Database {
     pub async fn connect_default() -> Result<Self> {
         let manager = r2d2_sqlite::SqliteConnectionManager::file("data/recipes.db");
         let pool = r2d2::Pool::new(manager)?;
-        // let config = ClientConfig::default().with_auth().await.unwrap();
-        // let gcs_client = Client::new(config);
-        let me = Self { pool };
+        let storage = StorageClient::new().await?;
+        let me = Self { pool, storage };
         me.migrate().await?;
         Ok(me)
     }

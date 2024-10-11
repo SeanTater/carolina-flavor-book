@@ -6,7 +6,7 @@ edition = "2021"
 [dependencies]
 anyhow = { workspace = true }
 async-trait = { workspace = true }
-axum = { features = ["multipart"], workspace = true }
+axum = { features = ["http2", "macros", "multipart"], workspace = true }
 axum-server = { features = ["rustls", "tls-rustls"], workspace = true }# Server only
 base64 = { workspace = true }
 bincode = { workspace = true }

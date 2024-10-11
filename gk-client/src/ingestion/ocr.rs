@@ -1,5 +1,4 @@
 use anyhow::Result;
-use async_openai::{config::OpenAIConfig, Client};
 use base64::Engine;
 use image::DynamicImage;
 
@@ -70,7 +69,7 @@ pub async fn read_text_from_image(img: &DynamicImage) -> Result<String> {
             .build()?
             .into()])
         .build()?;
-    super::llm::OpenAIClient
+    gk::ingestion::llm::OpenAIClient
         .chat()
         .create(request)
         .await?

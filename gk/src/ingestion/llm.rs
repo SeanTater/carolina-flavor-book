@@ -6,7 +6,7 @@ use async_openai::{
 };
 
 lazy_static::lazy_static! {
-    pub(crate) static ref OpenAIClient: async_openai::Client<OpenAIConfig> = async_openai::Client::build(
+    pub static ref OpenAIClient: async_openai::Client<OpenAIConfig> = async_openai::Client::build(
         Default::default(),
         OpenAIConfig::new()
             .with_api_key(
@@ -66,6 +66,14 @@ pub async fn freestyle(recipe_name: &str) -> Result<String> {
     tracing::info!("Creating a new recipe ..");
     let prompt_template = include_str!("../prompts/freestyle.md");
     let prompt = prompt_template.replace("{name}", recipe_name);
+    tracing::debug!("Prompt: {}", prompt);
+    call_llm(&prompt).await
+}
+
+/// Calls an LLM to depict the scene of a recipe after it's done (for image generation)
+pub async fn generate_recipe_scene(best_recipe_text: &str) -> Result<String> {
+    let prompt_template = include_str!("../prompts/generate-scenes.md");
+    let prompt = prompt_template.replace("{content}", best_recipe_text);
     tracing::debug!("Prompt: {}", prompt);
     call_llm(&prompt).await
 }

@@ -30,6 +30,9 @@ pub struct Args {
     /// Dry run mode: don't actually upload the recipe
     #[arg(long)]
     dry: bool,
+    /// Also illustrate the recipe using an API
+    #[arg(long)]
+    illustrate: bool,
     /// Directly upload a Revision with a specified source name, details, format, and content
     #[arg(long, num_args(4))]
     direct: Option<Vec<String>>,
@@ -116,7 +119,7 @@ async fn main() -> Result<()> {
 
     if args.freestyle {
         println!("Freestyle mode enabled");
-        let better_text = ingestion::freestyle(&args.name).await?;
+        let better_text = gk::ingestion::freestyle(&args.name).await?;
         best_input_text = Some(better_text.clone());
         revisions.push(basic_models::RevisionForUpload {
             source_name: "llm".to_string(),
@@ -129,7 +132,7 @@ async fn main() -> Result<()> {
 
     if let Some(content_text) = best_input_text {
         if !args.freestyle {
-            let better_text = ingestion::improve_recipe_with_llm(&content_text).await?;
+            let better_text = gk::ingestion::improve_recipe_with_llm(&content_text).await?;
 
             revisions.push(basic_models::RevisionForUpload {
                 source_name: "llm".to_string(),
@@ -138,6 +141,10 @@ async fn main() -> Result<()> {
                 details: Some("{\"model\": \"gpt-4o-mini\"}".to_string()),
             });
         }
+    }
+
+    if args.illustrate {
+        images.extend_from_slice(&gk::ingestion::illustrate_recipe(&args.name).await?);
     }
 
     let recipe_upload = basic_models::RecipeForUpload {
