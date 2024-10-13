@@ -25,8 +25,7 @@ pub async fn oauth_callback(
     let cookie = Cookie::build(("session_id", session.id.to_string()))
         .http_only(true)
         .path("/")
-        .secure(true)
-        .same_site(SameSite::Strict);
+        .secure(true);
     jar = jar.add(cookie);
     // Redirect to the home page or some post-login page.
     Ok((jar, Redirect::to("/")))

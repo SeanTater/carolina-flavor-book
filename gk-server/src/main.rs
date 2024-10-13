@@ -97,7 +97,9 @@ async fn main() -> Result<()> {
         .context("Connecting to database")?;
 
     // Setup oauth, sessions, and authentication
-    let oauth = OauthClient::new_from_config(&config.auth).context("Setting up authentication")?;
+    let oauth = OauthClient::new_from_config(&config.auth)
+        .await
+        .context("Setting up authentication")?;
 
     // Setup an embedding model and the search engine
     let embedder = search::model::EmbeddingModel::new().context("Building embedding model")?;
