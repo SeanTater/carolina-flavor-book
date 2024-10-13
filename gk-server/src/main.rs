@@ -11,7 +11,7 @@ use base64::Engine;
 use clap::Parser;
 use gk::basic_models;
 use gk_server::{
-    auth::{self, OauthClient, ServicePrincipal},
+    auth::{self, session::UserSession, OauthClient},
     database::Database,
     errors::{WebError, WebResult},
     models::{FullRecipe, Image, ImageContent, Recipe},
@@ -68,7 +68,6 @@ struct AppState {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    dotenvy::dotenv().ok();
     // initialize tracing
     let file_appender = tracing_appender::rolling::daily(
         if std::fs::exists("/app")? {
@@ -260,7 +259,7 @@ async fn get_image(
 async fn get_generate_image_task(
     State(db): State<Database>,
     Path(category): Path<String>,
-    _: ServicePrincipal,
+    _: UserSession,
 ) -> WebResult<Json<Option<FullRecipe>>> {
     let recipe = Recipe::get_any_recipe_without_enough_images(&db, &category)?;
     Ok(Json(recipe))
@@ -270,7 +269,7 @@ async fn get_generate_image_task(
 async fn upload_image(
     State(db): State<Database>,
     Path((recipe_id, category)): Path<(i64, String)>,
-    _: ServicePrincipal,
+    _: UserSession,
     image_bytes: body::Bytes,
 ) -> WebResult<StatusCode> {
     Image::push(
@@ -288,7 +287,7 @@ async fn upload_image(
 /// Upload a recipe and associated information
 async fn upload_recipe(
     State(db): State<Database>,
-    _: ServicePrincipal,
+    _: UserSession,
     body: Bytes,
 ) -> WebResult<Redirect> {
     let recipe_upload = bincode::deserialize(&body[..]).context("Deserializing recipe")?;

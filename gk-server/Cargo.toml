@@ -44,7 +44,6 @@ rustls = { features = ["ring"], workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_yaml = "0.9.34"
-sha2 = { workspace = true }
 strum = { features = ["derive"], workspace = true }
 thiserror = { workspace = true }
 tokio = { features = ["full"], workspace = true }
@@ -57,4 +56,3 @@ tracing-subscriber = { features = ["json", "env-filter", "tracing-log"], workspa
 url-escape = { workspace = true }
 
 webp = { workspace = true }
-zerocopy = { workspace = true }

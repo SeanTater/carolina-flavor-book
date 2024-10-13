@@ -1641,7 +1641,6 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_yaml",
- "sha2",
  "strum",
  "thiserror",
  "tokio",
@@ -1652,7 +1651,6 @@ dependencies = [
  "tracing-subscriber",
  "url-escape",
  "webp",
- "zerocopy 0.7.35",
 ]
 
 [[package]]
