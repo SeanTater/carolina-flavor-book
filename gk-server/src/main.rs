@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use axum::{
     body::{self, Bytes},
-    extract::{Path, State},
+    extract::{FromRef, Path, State},
     http::{header, StatusCode},
     response::{Html, IntoResponse, Redirect},
     routing::{get, post},
@@ -11,12 +11,11 @@ use base64::Engine;
 use clap::Parser;
 use gk::basic_models;
 use gk_server::{
-    auth::ServicePrincipal,
-    cache::{new_cache, CacheQuery, CacheValue, GKCache},
+    auth::{self, OauthClient, ServicePrincipal},
     database::Database,
     errors::{WebError, WebResult},
     models::{FullRecipe, Image, ImageContent, Recipe},
-    search,
+    search::{self, DocumentIndexHandle},
 };
 use minijinja::context;
 use rand::seq::SliceRandom;
@@ -56,20 +55,15 @@ lazy_static::lazy_static! {
 
 #[derive(Parser, Debug)]
 struct Args {
-    /// The address and optionally port to bind to
-    #[clap(long, default_value = "0.0.0.0:3000")]
-    address: String,
-
-    /// Whether to use HTTPS / TLS
-    #[clap(long)]
-    tls: bool,
+    /// The path to the yaml configuration file
+    config_path: String,
 }
 
-#[derive(Clone)]
-struct AllStates {
+#[derive(Clone, FromRef)]
+struct AppState {
     db: Database,
     doc_index: search::DocumentIndexHandle,
-    cache: GKCache,
+    oauth: OauthClient,
 }
 
 #[tokio::main]
@@ -94,8 +88,11 @@ async fn main() -> Result<()> {
     // Parse command line arguments
     let args = Args::parse();
 
+    // Load the configuration file
+    let config = gk_server::config::Config::load(&args.config_path)?;
+
     // connect to the database
-    let default_db = Database::connect_default()
+    let default_db = Database::connect(&config.database)
         .await
         .context("Connecting to database")?;
     // setup an embedding model
@@ -132,93 +129,83 @@ async fn main() -> Result<()> {
         .route("/api/recipe", post(upload_recipe))
         // serve static files from the `./src/static` directory
         .route("/static/*path", get(serve_static))
+        .route("/auth/login", get(auth::route::login))
+        .route("/auth/callback", get(auth::route::oauth_callback))
+        .route("/auth/logout", get(auth::route::logout))
         .layer(
             tower_http::compression::CompressionLayer::new()
                 .quality(tower_http::CompressionLevel::Fastest),
         )
         .layer(tower_http::trace::TraceLayer::new_for_http())
-        .with_state(AllStates {
+        .with_state(AppState {
             db: default_db,
             doc_index: document_index.clone(),
-            cache: new_cache(),
+            oauth: OauthClient::new_from_config(&config.auth)?,
         });
 
     // In development, use HTTP. In production, use HTTPS.
 
-    if args.tls {
+    if let Some(tls) = config.server.tls {
         rustls::crypto::ring::default_provider()
             .install_default()
             .expect("Failed to install rustls crypto provider");
-        let tls_config = axum_server::tls_rustls::RustlsConfig::from_pem_file(
-            "/etc/letsencrypt/live/gallagher.kitchen/fullchain.pem",
-            "/etc/letsencrypt/live/gallagher.kitchen/privkey.pem",
-        )
-        .await
-        .context("Loading TLS certificate")?;
+        let tls_config =
+            axum_server::tls_rustls::RustlsConfig::from_pem_file(tls.cert_path, tls.key_path)
+                .await
+                .context("Loading TLS certificate")?;
 
-        let addr = args.address.parse()?;
+        let addr = config.server.address.parse()?;
         tracing::info!("Listening on {}", addr);
         axum_server::bind_rustls(addr, tls_config)
             .serve(app.into_make_service())
             .await
             .context("Starting TLS server")?;
     } else {
-        let listener = tokio::net::TcpListener::bind(args.address).await?;
+        let listener = tokio::net::TcpListener::bind(config.server.address).await?;
         axum::serve(listener, app).await?;
     }
     Ok(())
 }
 
 // Render the home page with 20 random recipes
-async fn root(State(allstates): State<AllStates>) -> WebResult<Html<String>> {
-    let all_recipes = Recipe::get_all_basics(&allstates.db)?;
+async fn root(State(db): State<Database>) -> WebResult<Html<String>> {
+    let all_recipes = Recipe::get_all_basics(&db)?;
     let some_random_ids = all_recipes
         .choose_multiple(&mut rand::thread_rng(), 20)
         .map(|r| r.recipe_id)
         .collect::<Vec<_>>();
     Ok(Html(TEMPLATES.get_template("index.html.jinja")?.render(
         context! {
-            recipes => Recipe::get_extended(&allstates.db, &some_random_ids)?,
+            recipes => Recipe::get_extended(&db, &some_random_ids)?,
         },
     )?))
 }
 
 /// Render the browse page, which shows all the recipes for all the tags, grouped by tag,
 /// and two recipes per tag with highlights
-async fn browse_by_tag(State(allstates): State<AllStates>) -> WebResult<Html<String>> {
-    match allstates
-        .cache
-        .get_value_or_guard_async(&CacheQuery::TagSearchPage)
-        .await
-    {
-        Ok(CacheValue::TagSearchPage { page }) => Ok(Html(page.clone())),
-        Ok(_) => unreachable!(),
-        Err(guard) => {
-            tracing::info!("Building browse by tag page");
-            let mut recipes_by_tag = vec![];
-            for (tag_name, results) in allstates.doc_index.search_tags()? {
-                let highlights = results
-                    .choose_multiple(&mut rand::thread_rng(), 2)
-                    .map(|r| r.recipe.recipe_id)
-                    .collect::<Vec<_>>();
-                recipes_by_tag.push(context! {
-                    tag_name => tag_name,
-                    highlight_recipes => Recipe::get_extended(&allstates.db, &highlights)?,
-                    all_recipes => results
-                });
-            }
-            let page = TEMPLATES
-                .get_template("browse-by-tag.html.jinja")?
-                .render(context! {
-                    recipes_by_tag => recipes_by_tag,
-                })?;
-            guard
-                .insert(CacheValue::TagSearchPage { page: page.clone() })
-                .unwrap_or_default();
-
-            Ok(Html(page))
-        }
+async fn browse_by_tag(
+    State(db): State<Database>,
+    State(doc_index): State<DocumentIndexHandle>,
+) -> WebResult<Html<String>> {
+    let mut recipes_by_tag = vec![];
+    for (tag_name, results) in doc_index.search_tags()? {
+        let highlights = results
+            .choose_multiple(&mut rand::thread_rng(), 2)
+            .map(|r| r.recipe.recipe_id)
+            .collect::<Vec<_>>();
+        recipes_by_tag.push(context! {
+            tag_name => tag_name,
+            highlight_recipes => Recipe::get_extended(&db, &highlights)?,
+            all_recipes => results
+        });
     }
+    let page = TEMPLATES
+        .get_template("browse-by-tag.html.jinja")?
+        .render(context! {
+            recipes_by_tag => recipes_by_tag,
+        })?;
+
+    Ok(Html(page))
 }
 
 // Just reply that everything is okay
@@ -227,10 +214,10 @@ async fn health() -> StatusCode {
 }
 
 async fn get_recipe(
-    State(allstates): State<AllStates>,
+    State(db): State<Database>,
     Path(recipe_id): Path<i64>,
 ) -> WebResult<Html<String>> {
-    let recipe = Recipe::get_full_recipe(&allstates.db, recipe_id)?.ok_or(WebError::NotFound)?;
+    let recipe = Recipe::get_full_recipe(&db, recipe_id)?.ok_or(WebError::NotFound)?;
     Ok(Html(TEMPLATES.get_template("recipe.html.jinja")?.render(
         context! {
             recipe => recipe,
@@ -246,12 +233,10 @@ struct SearchQuery {
 }
 
 async fn search_recipes(
-    State(allstates): State<AllStates>,
+    State(doc_index): State<DocumentIndexHandle>,
     Form(search_query): Form<SearchQuery>,
 ) -> WebResult<impl IntoResponse> {
-    let results = allstates
-        .doc_index
-        .search(&search_query.query, search_query.page * 20, 20)?;
+    let results = doc_index.search(&search_query.query, search_query.page * 20, 20)?;
     Ok(Html(TEMPLATES.get_template("search.html.jinja")?.render(
         context! {
             query => search_query.query,
@@ -262,11 +247,10 @@ async fn search_recipes(
 }
 
 async fn get_image(
-    State(allstates): State<AllStates>,
+    State(db): State<Database>,
     Path(image_id): Path<i64>,
 ) -> WebResult<impl IntoResponse> {
-    let image =
-        ImageContent::get_image_content(&allstates.db, image_id)?.ok_or(WebError::NotFound)?;
+    let image = ImageContent::get_image_content(&db, image_id)?.ok_or(WebError::NotFound)?;
     Ok(([(header::CONTENT_TYPE, "image/webp")], image.content_bytes))
 }
 
@@ -274,23 +258,23 @@ async fn get_image(
 /// This is needed because it requires a lot of resources to generate images, so we want to do it in the background,
 /// not in this server, which does not have a GPU and is not optimized for image generation.
 async fn get_generate_image_task(
-    State(allstates): State<AllStates>,
+    State(db): State<Database>,
     Path(category): Path<String>,
     _: ServicePrincipal,
 ) -> WebResult<Json<Option<FullRecipe>>> {
-    let recipe = Recipe::get_any_recipe_without_enough_images(&allstates.db, &category)?;
+    let recipe = Recipe::get_any_recipe_without_enough_images(&db, &category)?;
     Ok(Json(recipe))
 }
 
 /// Upload an image for a recipe.
 async fn upload_image(
-    State(allstates): State<AllStates>,
+    State(db): State<Database>,
     Path((recipe_id, category)): Path<(i64, String)>,
     _: ServicePrincipal,
     image_bytes: body::Bytes,
 ) -> WebResult<StatusCode> {
     Image::push(
-        &allstates.db,
+        &db,
         recipe_id,
         basic_models::ImageForUpload {
             category,
@@ -303,16 +287,16 @@ async fn upload_image(
 
 /// Upload a recipe and associated information
 async fn upload_recipe(
-    State(allstates): State<AllStates>,
+    State(db): State<Database>,
     _: ServicePrincipal,
     body: Bytes,
 ) -> WebResult<Redirect> {
     let recipe_upload = bincode::deserialize(&body[..]).context("Deserializing recipe")?;
-    let recipe_id = Recipe::push(&allstates.db, recipe_upload).await?;
+    let recipe_id = Recipe::push(&db, recipe_upload).await?;
     Ok(Redirect::to(&format!("/recipe/{}", recipe_id)))
 }
 
-/// Serve static files from in memeory using `include_dir!`
+/// Serve static files from in memory using `include_dir!`
 async fn serve_static(Path(path): Path<String>) -> WebResult<impl IntoResponse> {
     let dir = include_dir::include_dir!("$CARGO_MANIFEST_DIR/static");
     let bytes = dir.get_file(&path).ok_or(WebError::NotFound)?.contents();

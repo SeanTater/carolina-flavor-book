@@ -7,29 +7,31 @@ edition = "2021"
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 axum = { features = ["http2", "macros", "multipart"], workspace = true }
+axum-extra = { version = "0.9.4", features = ["cookie"] }
 axum-server = { features = ["rustls", "tls-rustls"], workspace = true }# Server only
 base64 = { workspace = true }
 bincode = { workspace = true }
 candle-core = { workspace = true }
 chrono = { workspace = true }
 clap = { features = ["derive"], workspace = true }
-dotenvy = { workspace = true }
+crypto-bigint = "0.5.5"
 env_logger = { workspace = true }
 fastembed = { default-features = false, features = ["ort-download-binaries"], workspace = true }
 gk = { path = "../gk" }
 glob = { workspace = true }
 google-cloud-storage = { workspace = true }
 half = { features = ["serde", "zerocopy"], workspace = true }
-hex = { workspace = true }
+hex.workspace = true
 image = { workspace = true }
 imageproc = { workspace = true }
 include_dir = "0.7.4"
 itertools = { workspace = true }
+jsonwebtoken = "9.3.0"
 lazy_static = { workspace = true }
 log = { workspace = true }
 markdown = { workspace = true }
 minijinja = "2.3.1"
-quick_cache = "0.6.9"
+oauth2 = "4.4.2"
 r2d2 = { workspace = true }# Server only
 r2d2_sqlite = { workspace = true }# Server only
 rand = { workspace = true }
@@ -41,6 +43,7 @@ rusqlite = { features = ["bundled"], workspace = true }
 rustls = { features = ["ring"], workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+serde_yaml = "0.9.34"
 sha2 = { workspace = true }
 strum = { features = ["derive"], workspace = true }
 thiserror = { workspace = true }

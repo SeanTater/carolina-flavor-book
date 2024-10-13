@@ -14,7 +14,7 @@ pub async fn illustrate_recipe(best_recipe_text: &str) -> Result<Vec<ImageForUpl
     let api_key = dotenvy::var("REPLICATE_API_KEY")?;
     for scene_id in 0..5 {
         // Each scene is independent
-        let scene = generate_recipe_scene(&best_recipe_text).await?;
+        let scene = generate_recipe_scene(best_recipe_text).await?;
         let image_generation_response: serde_json::Value = reqwest_client
             .post("https://api.replicate.com/v1/models/black-forest-labs/flux-schnell/predictions")
             .bearer_auth(&api_key)
@@ -48,7 +48,7 @@ pub async fn illustrate_recipe(best_recipe_text: &str) -> Result<Vec<ImageForUpl
             .bytes()
             .await?;
         // Save to a local file for debugging
-        std::fs::write(&format!("scene-{}.webp", scene_id), &image_bytes)?;
+        std::fs::write(format!("scene-{}.webp", scene_id), &image_bytes)?;
     }
     // todo
     Ok(vec![])

@@ -14,3 +14,5 @@ initial-setup
 .pytest_cache
 .env
 access.log*
+
+config/

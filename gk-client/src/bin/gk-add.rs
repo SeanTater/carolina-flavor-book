@@ -1,6 +1,5 @@
 use anyhow::{ensure, Ok, Result};
 use clap::{Parser, ValueEnum};
-use dotenvy;
 use gk::basic_models;
 use gk_client::ingestion;
 
@@ -67,7 +66,7 @@ async fn main() -> Result<()> {
     println!("Recipe name: {}", args.name);
 
     if let Some([source_name, details, format, content_text]) =
-        args.direct.as_ref().map(Vec::as_slice)
+        args.direct.as_deref()
     {
         revisions.push(basic_models::RevisionForUpload {
             source_name: source_name.clone(),

@@ -38,4 +38,5 @@ tasks:
   setup-dev-env:
     cmds:
       - gcloud auth configure-docker us-central1-docker.pkg.dev
+      - gcloud auth application-default login
 
