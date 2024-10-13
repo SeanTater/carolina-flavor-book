@@ -38,4 +38,5 @@ pub struct AuthConfig {
     pub client_id: String,
     pub client_secret: String,
     pub redirect_uri: String,
+    pub session_storage_path: String,
 }

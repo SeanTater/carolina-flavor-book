@@ -12,6 +12,7 @@ use clap::Parser;
 use gk::basic_models;
 use gk_server::{
     auth::{self, session::UserSession, OauthClient},
+    config::Config,
     database::Database,
     errors::{WebError, WebResult},
     models::{FullRecipe, Image, ImageContent, Recipe},
@@ -88,13 +89,17 @@ async fn main() -> Result<()> {
     let args = Args::parse();
 
     // Load the configuration file
-    let config = gk_server::config::Config::load(&args.config_path)?;
+    let config = Config::load(&args.config_path).context("Parsing configuration")?;
 
-    // connect to the database
+    // Connect to the database
     let default_db = Database::connect(&config.database)
         .await
         .context("Connecting to database")?;
-    // setup an embedding model
+
+    // Setup oauth, sessions, and authentication
+    let oauth = OauthClient::new_from_config(&config.auth).context("Setting up authentication")?;
+
+    // Setup an embedding model and the search engine
     let embedder = search::model::EmbeddingModel::new().context("Building embedding model")?;
     let document_index = search::DocumentIndexHandle::new(default_db.clone(), embedder);
     document_index
@@ -139,7 +144,7 @@ async fn main() -> Result<()> {
         .with_state(AppState {
             db: default_db,
             doc_index: document_index.clone(),
-            oauth: OauthClient::new_from_config(&config.auth)?,
+            oauth,
         });
 
     // In development, use HTTP. In production, use HTTPS.

@@ -13,7 +13,7 @@ use oauth2::{
     basic::BasicTokenType, reqwest::async_http_client, AuthUrl, AuthorizationCode, ClientId,
     ClientSecret, CsrfToken, PkceCodeChallenge, RedirectUrl, RevocationUrl, Scope, TokenUrl,
 };
-use session::{SessionID, UserSession};
+use session::{SessionID, Sessions, UserSession};
 
 pub mod route;
 pub mod session;
@@ -77,6 +77,7 @@ pub struct OauthClient {
     // to make it work for multiple servers.
     open_auth_attempts: Arc<RwLock<Vec<ExpiringCSRFToken>>>,
     jwks: Arc<RwLock<Jwks>>,
+    sessions: Arc<Sessions>,
 }
 
 #[derive(Clone, Default, Deserialize)]
@@ -147,6 +148,7 @@ impl OauthClient {
             client,
             open_auth_attempts: Default::default(),
             jwks: Default::default(),
+            sessions: Default::default(),
         })
     }
 

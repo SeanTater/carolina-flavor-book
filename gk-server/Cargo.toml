@@ -14,7 +14,8 @@ bincode = { workspace = true }
 candle-core = { workspace = true }
 chrono = { workspace = true }
 clap = { features = ["derive"], workspace = true }
-crypto-bigint = "0.5.5"
+crypto-bigint = { version = "0.5.5", features = ["serde"] }
+dashmap = { version = "6.1.0", features = ["serde"] }
 env_logger = { workspace = true }
 fastembed = { default-features = false, features = ["ort-download-binaries"], workspace = true }
 gk = { path = "../gk" }
