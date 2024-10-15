@@ -29,7 +29,8 @@ hr {
 }
 
 article,
-search-bar {
+search-bar,
+footer {
     margin: 0 auto 1rem auto;
     padding: 0.5rem 1rem;
     max-width: 1200px;
@@ -49,7 +50,8 @@ search-bar {
 }
 
 search-bar h1 {
-    margin: 0 1rem;
+    margin: 0.5rem 1rem;
+    font-size: min(2rem, 8vw);
 }
 
 search-bar h1 a {
@@ -195,4 +197,13 @@ search-relevance {
     height: 0.5rem;
     border-radius: 0 0 5px 5px;
     z-index: 1;
+}
+
+footer ul.horizontal {
+    display: flex;
+    justify-content: center;
+    list-style-type: none;
+    padding: 0;
+    gap: 1rem;
+    flex-wrap: wrap;
 }
