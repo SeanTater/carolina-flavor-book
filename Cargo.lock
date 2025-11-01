@@ -1515,14 +1515,7 @@ checksum = "40ecd4077b5ae9fd2e9e169b102c6c330d0605168eb0e8bf79952b256dbefffd"
 name = "gk"
 version = "0.1.2"
 dependencies = [
- "anyhow",
- "async-openai",
- "dotenvy",
- "lazy_static",
- "reqwest 0.12.7",
  "serde",
- "serde_json",
- "tracing",
 ]
 
 [[package]]

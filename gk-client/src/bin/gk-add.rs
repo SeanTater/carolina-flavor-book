@@ -118,7 +118,7 @@ async fn main() -> Result<()> {
 
     if args.freestyle {
         println!("Freestyle mode enabled");
-        let better_text = gk::ingestion::freestyle(&args.name).await?;
+        let better_text = ingestion::freestyle(&args.name).await?;
         best_input_text = Some(better_text.clone());
         revisions.push(basic_models::RevisionForUpload {
             source_name: "llm".to_string(),
@@ -131,7 +131,7 @@ async fn main() -> Result<()> {
 
     if let Some(content_text) = best_input_text {
         if !args.freestyle {
-            let better_text = gk::ingestion::improve_recipe_with_llm(&content_text).await?;
+            let better_text = ingestion::improve_recipe_with_llm(&content_text).await?;
 
             revisions.push(basic_models::RevisionForUpload {
                 source_name: "llm".to_string(),
@@ -143,7 +143,7 @@ async fn main() -> Result<()> {
     }
 
     if args.illustrate {
-        images.extend_from_slice(&gk::ingestion::illustrate_recipe(&args.name).await?);
+        images.extend_from_slice(&ingestion::illustrate_recipe(&args.name).await?);
     }
 
     let recipe_upload = basic_models::RecipeForUpload {

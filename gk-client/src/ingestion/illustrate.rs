@@ -1,5 +1,5 @@
 use super::llm::generate_recipe_scene;
-use crate::basic_models::ImageForUpload;
+use gk::basic_models::ImageForUpload;
 use anyhow::anyhow;
 use anyhow::Result;
 use reqwest::Client;

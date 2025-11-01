@@ -69,7 +69,7 @@ pub async fn read_text_from_image(img: &DynamicImage) -> Result<String> {
             .build()?
             .into()])
         .build()?;
-    gk::ingestion::llm::OpenAIClient
+    super::llm::OpenAIClient
         .chat()
         .create(request)
         .await?
