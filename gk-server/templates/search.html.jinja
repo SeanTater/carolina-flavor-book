@@ -11,7 +11,7 @@ Search results for "{{query}}"
     <a href="/recipe/{{search_result.recipe.recipe_id}}">
         <image-card>
             <h4>{{search_result.recipe.name}}</h4>
-            <img src="https://storage.googleapis.com/kibitz-prod/gallagher-kitchen/images/{{search_result.recipe.thumbnail_image_id}}.webp"
+            <img src="/image/{{search_result.recipe.thumbnail_image_id}}"
                 alt="{{search_result.recipe.name}}" loading="lazy">
 
             <search-relevance style="--relevance: {{search_result.relevance}}%;"

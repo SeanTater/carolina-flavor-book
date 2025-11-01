@@ -18,9 +18,9 @@
 <h3>Images</h3>
 <image-cards>
     {% for image in recipe.images %}
-    <a href="https://storage.googleapis.com/kibitz-prod/gallagher-kitchen/images/{{ image.image_id }}.webp">
+    <a href="/image/{{ image.image_id }}">
         <image-card>
-            <img src="https://storage.googleapis.com/kibitz-prod/gallagher-kitchen/images/{{ image.image_id }}.webp"
+            <img src="/image/{{ image.image_id }}"
                 alt="{{ loop.index }}" loading="lazy">
         </image-card>
     </a>
