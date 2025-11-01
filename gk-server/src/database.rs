@@ -1,18 +1,16 @@
-use crate::{config::DatabaseConfig, storage::StorageClient};
+use crate::config::DatabaseConfig;
 use anyhow::Result;
 
 #[derive(Clone)]
 pub struct Database {
     pub pool: r2d2::Pool<r2d2_sqlite::SqliteConnectionManager>,
-    pub storage: StorageClient,
 }
 
 impl Database {
     pub async fn connect(conf: &DatabaseConfig) -> Result<Self> {
         let manager = r2d2_sqlite::SqliteConnectionManager::file(conf.path.clone());
         let pool = r2d2::Pool::new(manager)?;
-        let storage = StorageClient::new().await?;
-        let me = Self { pool, storage };
+        let me = Self { pool };
         me.migrate().await?;
         Ok(me)
     }

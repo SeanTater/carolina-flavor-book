@@ -20,7 +20,6 @@ env_logger = { workspace = true }
 fastembed = { default-features = false, features = ["ort-download-binaries"], workspace = true }
 gk = { path = "../gk" }
 glob = { workspace = true }
-google-cloud-storage = { workspace = true }
 half = { features = ["serde", "zerocopy"], workspace = true }
 hex.workspace = true
 image = { workspace = true }

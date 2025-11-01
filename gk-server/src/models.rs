@@ -298,10 +298,6 @@ impl Image {
             params![recipe_id, upload.category, &content_bytes[..]],
         )?;
 
-        // Upload the image to GCS
-        db.storage
-            .upload_image(conn.last_insert_rowid(), content_bytes.to_vec())
-            .await?;
         Ok(())
     }
 }

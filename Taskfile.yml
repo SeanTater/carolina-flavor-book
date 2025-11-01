@@ -9,13 +9,31 @@ tasks:
       - "cargo chef prepare --bin gk-server"
       - "docker build -t gk-server:{{.VERSION}} ."
       - 'docker tag gk-server:{{.VERSION}} gk-server:latest'
-      - 'docker tag gk-server:{{.VERSION}} us-central1-docker.pkg.dev/telepathicpenguins/gk-container-images/gk-server:{{.VERSION}}'
-      - 'docker tag gk-server:{{.VERSION}} us-central1-docker.pkg.dev/telepathicpenguins/gk-container-images/gk-server:latest'
+      # - 'docker tag gk-server:{{.VERSION}} us-central1-docker.pkg.dev/telepathicpenguins/gk-container-images/gk-server:{{.VERSION}}'
+      # - 'docker tag gk-server:{{.VERSION}} us-central1-docker.pkg.dev/telepathicpenguins/gk-container-images/gk-server:latest'
+
+  setup-arm64:
+    desc: Set up QEMU for ARM64 emulation
+    cmds:
+      - docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
+      - 'echo "ARM64 emulation enabled. Test with: docker run --platform linux/arm64 --rm alpine:latest uname -m"'
+
+  build-arm64:
+    cmds:
+      - echo Building {{.VERSION}} for ARM64
+      - "cargo chef prepare --bin gk-server"
+      - "docker buildx build --platform linux/arm64 -t gk-server:{{.VERSION}}-arm64 --load ."
+      - 'docker tag gk-server:{{.VERSION}}-arm64 gk-server:latest-arm64'
   run-local:
     deps: [build]
     cmds:
       # No TLS enabled
       - 'docker run -p 3000:3000 -v $PWD/data/:/app/data/ -v $PWD/.env:/app/.env gk-server '
+
+  run-local-arm64:
+    deps: [build-arm64]
+    cmds:
+      - 'docker run --platform linux/arm64 -p 3000:3000 -v $PWD/data/:/app/data/ -v $PWD/.env:/app/.env gk-server:latest-arm64 '
   
   setup-vm:
     cmds:

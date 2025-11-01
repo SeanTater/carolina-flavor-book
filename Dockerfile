@@ -1,4 +1,4 @@
-FROM docker.io/rust:bookworm as builder
+FROM docker.io/rust:bookworm AS builder
 RUN cargo install cargo-chef
 
 WORKDIR /app
