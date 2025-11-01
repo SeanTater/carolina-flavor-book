@@ -1,6 +1,6 @@
 use axum::extract::FromRef;
 use axum_extra::extract::CookieJar;
-use crypto_bigint::U256;
+use crypto_bigint::{subtle::ConstantTimeEq, U256};
 use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -81,5 +81,76 @@ where
             .value()
             .clone();
         Ok(session)
+    }
+}
+
+/// Service principal authentication via Bearer token
+pub struct ServicePrincipal;
+
+#[async_trait]
+impl<S> FromRequestParts<S> for ServicePrincipal
+where
+    OauthClient: FromRef<S>,
+    S: Send + Sync,
+{
+    type Rejection = (StatusCode, &'static str);
+
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+        let no = |msg: &'static str| (StatusCode::UNAUTHORIZED, msg);
+
+        // Extract Authorization header
+        let auth_header = parts
+            .headers
+            .get("Authorization")
+            .ok_or(no("No Authorization header"))?;
+
+        // Parse Bearer token
+        let auth_str = auth_header
+            .to_str()
+            .map_err(|_| no("Invalid Authorization header"))?;
+
+        let token = auth_str
+            .strip_prefix("Bearer ")
+            .ok_or(no("Authorization must be Bearer token"))?;
+
+        // Get expected secret from OauthClient
+        let client = OauthClient::from_ref(state);
+        let expected = &client.service_principal_secret;
+
+        // Constant-time comparison to prevent timing attacks
+        if token.as_bytes().ct_eq(expected.as_bytes()).into() {
+            Ok(ServicePrincipal)
+        } else {
+            Err(no("Invalid service principal secret"))
+        }
+    }
+}
+
+/// Authenticated user - either via session cookie or service principal token
+pub enum AuthenticatedUser {
+    Session(UserSession),
+    ServicePrincipal,
+}
+
+#[async_trait]
+impl<S> FromRequestParts<S> for AuthenticatedUser
+where
+    OauthClient: FromRef<S>,
+    S: Send + Sync,
+{
+    type Rejection = (StatusCode, &'static str);
+
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+        // Try session cookie first
+        if let Ok(session) = UserSession::from_request_parts(parts, state).await {
+            return Ok(Self::Session(session));
+        }
+
+        // Fall back to service principal
+        if let Ok(_principal) = ServicePrincipal::from_request_parts(parts, state).await {
+            return Ok(Self::ServicePrincipal);
+        }
+
+        Err((StatusCode::UNAUTHORIZED, "Authentication required"))
     }
 }

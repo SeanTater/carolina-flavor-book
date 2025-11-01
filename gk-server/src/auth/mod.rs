@@ -79,6 +79,7 @@ pub struct OauthClient {
     open_auth_attempts: Arc<RwLock<Vec<ExpiringCSRFToken>>>,
     jwks: Jwks,
     sessions: Arc<Sessions>,
+    service_principal_secret: String,
 }
 
 #[derive(Clone)]
@@ -169,6 +170,7 @@ impl OauthClient {
             open_auth_attempts: Default::default(),
             jwks: Jwks::new(&conf.audiences).await?,
             sessions: Default::default(),
+            service_principal_secret: conf.service_principal_secret.clone(),
         })
     }
 

@@ -11,7 +11,7 @@ use base64::Engine;
 use clap::Parser;
 use gk::basic_models;
 use gk_server::{
-    auth::{self, session::UserSession, OauthClient},
+    auth::{self, session::AuthenticatedUser, OauthClient},
     config::Config,
     database::Database,
     errors::{WebError, WebResult},
@@ -118,6 +118,8 @@ async fn main() -> Result<()> {
         .route("/browse/by-tag", get(browse_by_tag))
         // `GET /health` goes to `health`
         .route("/health", get(health))
+        // `GET /api/auth/check` goes to `auth_check`
+        .route("/api/auth/check", get(auth_check))
         // `GET /recipe/:recipe_id` goes to `get_recipe`
         .route("/recipe/:recipe_id", get(get_recipe))
         // `POST /search` goes to `search_recipes`
@@ -219,6 +221,22 @@ async fn health() -> StatusCode {
     StatusCode::OK
 }
 
+/// Check authentication status - returns info about how the user is authenticated
+async fn auth_check(user: AuthenticatedUser) -> Json<serde_json::Value> {
+    match user {
+        AuthenticatedUser::Session(session) => Json(serde_json::json!({
+            "authenticated": true,
+            "method": "session",
+            "email": session.email,
+            "name": format!("{} {}", session.given_name, session.family_name),
+        })),
+        AuthenticatedUser::ServicePrincipal => Json(serde_json::json!({
+            "authenticated": true,
+            "method": "service_principal",
+        })),
+    }
+}
+
 async fn get_recipe(
     State(db): State<Database>,
     Path(recipe_id): Path<i64>,
@@ -266,7 +284,7 @@ async fn get_image(
 async fn get_generate_image_task(
     State(db): State<Database>,
     Path(category): Path<String>,
-    _: UserSession,
+    _: AuthenticatedUser,
 ) -> WebResult<Json<Option<FullRecipe>>> {
     let recipe = Recipe::get_any_recipe_without_enough_images(&db, &category)?;
     Ok(Json(recipe))
@@ -276,7 +294,7 @@ async fn get_generate_image_task(
 async fn upload_image(
     State(db): State<Database>,
     Path((recipe_id, category)): Path<(i64, String)>,
-    _: UserSession,
+    _: AuthenticatedUser,
     image_bytes: body::Bytes,
 ) -> WebResult<StatusCode> {
     Image::push(
@@ -294,7 +312,7 @@ async fn upload_image(
 /// Upload a recipe and associated information
 async fn upload_recipe(
     State(db): State<Database>,
-    _: UserSession,
+    _: AuthenticatedUser,
     body: Bytes,
 ) -> WebResult<Redirect> {
     let recipe_upload = bincode::deserialize(&body[..]).context("Deserializing recipe")?;

@@ -40,4 +40,5 @@ pub struct AuthConfig {
     pub redirect_uri: String,
     pub session_storage_path: String,
     pub audiences: Vec<String>,
+    pub service_principal_secret: String,
 }

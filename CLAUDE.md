@@ -143,3 +143,49 @@ Migrations are embedded SQL files in `gk-server/src/migrations/`. The system tra
 The client requires API keys in `.env` file for:
 - `OPENAI_API_KEY` - recipe generation and improvement
 - `REPLICATE_API_TOKEN` - AI image generation
+- `PRINCIPAL_SECRET` - service principal authentication (for automated recipe uploads)
+
+## Authentication
+
+The server supports two authentication methods:
+
+1. **Google OAuth** - For interactive users via web browser
+2. **Service Principal** - For automated clients (CLI tools, scripts)
+
+### Service Principal Setup
+
+1. Generate a strong secret:
+   ```bash
+   openssl rand -hex 32
+   ```
+
+2. Add to server config (`config/dev.yml` or `config/prod.yml`):
+   ```yaml
+   auth:
+     service_principal_secret: your-generated-secret-here
+   ```
+
+3. Add to client environment (`.env` file):
+   ```
+   PRINCIPAL_SECRET=your-generated-secret-here
+   ```
+
+### Testing Authentication
+
+Test service principal authentication:
+```bash
+cargo run --bin gk-auth-check -- --server http://localhost:3000
+```
+
+Or with curl:
+```bash
+curl -H "Authorization: Bearer $PRINCIPAL_SECRET" http://localhost:3000/api/auth/check
+```
+
+Expected response:
+```json
+{
+  "authenticated": true,
+  "method": "service_principal"
+}
+```
