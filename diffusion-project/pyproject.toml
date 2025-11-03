@@ -1,0 +1,47 @@
+[project]
+name = "diffusion-example"
+version = "0.1.0"
+description = "Diffusion model image generation with fp8 quantization"
+readme = "README.md"
+requires-python = ">=3.10,<3.13"
+dependencies = [
+  "torch==2.9.0+cu128",
+  "torchvision==0.24.0+cu128",
+  "torchaudio==2.9.0+cu128",
+  "torchsde",
+  "transformers>=4.37.2",
+  "tokenizers>=0.13.3",
+  "sentencepiece",
+  "safetensors>=0.4.2",
+  "einops",
+  "pillow",
+  "numpy>=1.25.0",
+  "av>=14.2.0",
+  "psutil",
+  "scipy",
+  "tqdm",
+  "pyyaml",
+  "fastapi",
+  "uvicorn",
+]
+
+[project.scripts]
+diffusion-example = "diffusion_example.main:main"
+diffusion-server = "diffusion_example.server:cli"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.uv]
+package = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu128" }
+torchvision = { index = "pytorch-cu128" }
+torchaudio = { index = "pytorch-cu128" }
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true

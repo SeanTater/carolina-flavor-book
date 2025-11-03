@@ -16,3 +16,10 @@ initial-setup
 access.log*
 
 config/
+
+# Python virtual environments
+.venv
+venv
+
+# Generated outputs
+outputs/

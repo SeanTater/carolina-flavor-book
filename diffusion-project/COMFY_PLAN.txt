@@ -1,0 +1,30 @@
+diffusion script integration plan with ComfyUI
+
+1. bootstrap comfy environment
+   - add /home/sean-gallagher/sandbox/ComfyUI-2025 to sys.path
+   - ensure comfy.options.args_parsing stays False so comfy/cli_args.py parses [].
+   - import folder_paths to initialize model dirs.
+
+2. load comfy models
+   - use folder_paths.get_full_path_or_raise for assets.
+   - unet via comfy.sd.load_diffusion_model(path, model_options={'dtype': torch.float8_e4m3fn})
+   - text encoder via comfy.sd.load_clip(..., clip_type=sd.CLIPType.QWEN_IMAGE)
+   - vae via comfy.sd.VAE(sd=comfy.utils.load_torch_file(path)).
+
+3. prompt encoding
+   - replicate TextEncodeQwenImageEditPlus: tokens = clip.tokenize(prompt); conditioning = clip.encode_from_tokens_scheduled(tokens).
+   - run once for positive prompt, once for negative.
+
+4. latent + sampling
+   - create latent zeros tensor (batch,16,H/8,W/8) like EmptySD3LatentImage.
+   - call nodes.common_ksampler or equivalent with cfg/steps/scheduler matching workflow.
+   - this uses comfy.sample.sample to run fp8 model.
+
+5. decode + save
+   - use vae.decode(latent['samples']) -> float tensor.
+   - convert to 0-255 uint8 and save PNG.
+
+6. project wiring
+   - add comfy_bridge helper module implementing above steps.
+   - adjust main.py to call helper, keep prompt/seed/size parameters.
+   - expose sampler/cfg/steps for future lightning/refine stages.
