@@ -11,13 +11,14 @@ import time
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, Sequence
+from typing import Literal, Optional, Sequence
 
 import uvicorn
-from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi import FastAPI, File, Form, HTTPException, Request, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
+from PIL import Image
 from pydantic import BaseModel, Field, field_validator
 
 from diffusion_example import comfy_bridge
@@ -88,6 +89,23 @@ class GeneratedImage:
     job_id: str
     image_bytes: bytes
     saved_path: Optional[Path]
+
+
+@dataclass
+class ImageEditJobRequest:
+    prompt: str
+    negative_prompt: str
+    max_width: int
+    max_height: int
+    steps: int
+    cfg_scale: float
+    seed: Optional[int]
+    sampler: str
+    scheduler: str
+    denoise: float
+    save_to_disk: bool
+    filename: Optional[str]
+    image_bytes: bytes
 
 
 class ResultStore:
@@ -189,7 +207,104 @@ class ComfyService:
         return target
 
 
-def create_app(service: ComfyService, store: ResultStore) -> FastAPI:
+class ImageEditService:
+    def __init__(self, output_dir: Path, loras: Optional[Sequence[comfy_bridge.LoraSpec]] = None):
+        self._output_dir = output_dir
+        self._output_dir.mkdir(parents=True, exist_ok=True)
+        self._loras = tuple(loras or ())
+        LOGGER.info("Loading ComfyUI components for image edit...")
+        self._components = comfy_bridge.load_qwen_image_edit_components(loras=self._loras)
+        self._lock = asyncio.Lock()
+        self._last_used = time.monotonic()
+
+    def touch(self) -> None:
+        self._last_used = time.monotonic()
+
+    def last_used(self) -> float:
+        return self._last_used
+
+    def loras(self) -> tuple[comfy_bridge.LoraSpec, ...]:
+        return self._loras
+
+    async def generate(self, request: ImageEditJobRequest) -> GeneratedImage:
+        async with self._lock:
+            self.touch()
+            job_id = uuid.uuid4().hex
+
+            def _generate() -> GeneratedImage:
+                with Image.open(io.BytesIO(request.image_bytes)) as pil_image:
+                    pil_image.load()
+                    prepared = comfy_bridge.prepare_image_for_edit(
+                        pil_image,
+                        request.max_width,
+                        request.max_height,
+                    )
+                context = comfy_bridge.prepare_qwen_edit_context(self._components, prepared)
+                positive = comfy_bridge.encode_qwen_edit_conditioning(
+                    self._components,
+                    request.prompt,
+                    context,
+                )
+                negative = comfy_bridge.encode_prompt(
+                    self._components.clip,
+                    request.negative_prompt or " ",
+                )
+                latent = comfy_bridge.image_to_latent(self._components, prepared)
+                sampled = comfy_bridge.sample_latent(
+                    self._components,
+                    positive=positive,
+                    negative=negative,
+                    latent=latent,
+                    seed=request.seed or 0,
+                    steps=request.steps,
+                    cfg_scale=request.cfg_scale,
+                    sampler_name=request.sampler,
+                    scheduler=request.scheduler,
+                    denoise=request.denoise,
+                )
+                decoded = comfy_bridge.decode_latent(self._components, sampled)
+                image = comfy_bridge.tensor_to_pil(decoded)
+
+                buffer = io.BytesIO()
+                image.save(buffer, format="PNG")
+                image_bytes = buffer.getvalue()
+                saved_path = None
+                if request.save_to_disk:
+                    filename = request.filename or f"{job_id}.png"
+                    saved_path = self._write_image(image_bytes, filename)
+                return GeneratedImage(
+                    job_id=job_id,
+                    image_bytes=image_bytes,
+                    saved_path=saved_path,
+                )
+
+            result = await asyncio.to_thread(_generate)
+            self.touch()
+            return result
+
+    def save_existing(self, job_id: str, data: bytes, filename: str) -> Path:
+        self.touch()
+        return self._write_image(data, filename, suffix=f"-{job_id}")
+
+    def _write_image(self, image_bytes: bytes, filename: str, suffix: str = "") -> Path:
+        safe_filename = filename
+        if not safe_filename.lower().endswith(".png"):
+            safe_filename = f"{safe_filename}{suffix}.png" if suffix else f"{safe_filename}.png"
+        target = (self._output_dir / safe_filename).resolve()
+        if self._output_dir.resolve() not in target.parents and target != self._output_dir.resolve():
+            raise HTTPException(status_code=400, detail="Filename escapes output directory.")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        with open(target, "wb") as handle:
+            handle.write(image_bytes)
+        LOGGER.info("Saved image to %s", target)
+        return target
+
+
+def create_app(
+    service: ComfyService | ImageEditService,
+    store: ResultStore,
+    pipeline: Literal["generate", "image-edit"],
+) -> FastAPI:
     app = FastAPI(title="Diffusion Comfy Bridge", version="0.2.0")
 
     if STATIC_DIR.exists():
@@ -216,20 +331,73 @@ def create_app(service: ComfyService, store: ResultStore) -> FastAPI:
             return HTMLResponse("<html><body><h1>Diffusion server running</h1></body></html>")
         return HTMLResponse((STATIC_DIR / "index.html").read_text(encoding="utf-8"))
 
-    @app.post("/api/generate", response_model=GenerationResponse)
-    async def generate_image(request: GenerationRequest) -> GenerationResponse:
-        result = await service.generate(request)
-        await store.add(result.job_id, result.image_bytes)
-        base64_png = (
-            base64.b64encode(result.image_bytes).decode("ascii") if request.include_base64 else None
-        )
-        saved_path = str(result.saved_path) if result.saved_path else None
-        return GenerationResponse(
-            job_id=result.job_id,
-            image_url=f"/api/image/{result.job_id}",
-            saved_path=saved_path,
-            base64_png=base64_png,
-        )
+    if pipeline == "generate":
+        @app.post("/api/generate", response_model=GenerationResponse)
+        async def generate_image(request: GenerationRequest) -> GenerationResponse:
+            result = await service.generate(request)  # type: ignore[arg-type]
+            await store.add(result.job_id, result.image_bytes)
+            base64_png = (
+                base64.b64encode(result.image_bytes).decode("ascii") if request.include_base64 else None
+            )
+            saved_path = str(result.saved_path) if result.saved_path else None
+            return GenerationResponse(
+                job_id=result.job_id,
+                image_url=f"/api/image/{result.job_id}",
+                saved_path=saved_path,
+                base64_png=base64_png,
+            )
+
+    if pipeline == "image-edit":
+        @app.post("/api/image-edit", response_model=GenerationResponse)
+        async def edit_image(
+            prompt: str = Form(..., min_length=1, max_length=2048),
+            negative_prompt: str = Form("", max_length=2048),
+            max_width: int = Form(1664, ge=16, le=2048),
+            max_height: int = Form(928, ge=16, le=2048),
+            steps: int = Form(30, ge=1, le=200),
+            cfg_scale: float = Form(4.0, ge=0.0, le=20.0),
+            seed: Optional[int] = Form(None, ge=0, le=2**63 - 1),
+            sampler: str = Form("euler"),
+            scheduler: str = Form("simple"),
+            denoise: float = Form(1.0, ge=0.0, le=1.0),
+            save_to_disk: bool = Form(False),
+            filename: Optional[str] = Form(None, max_length=255),
+            include_base64: bool = Form(False),
+            image: UploadFile = File(...),
+        ) -> GenerationResponse:
+            if filename and ("/" in filename or "\\" in filename):
+                raise HTTPException(status_code=400, detail="Filename must not contain directory separators.")
+            payload = await image.read()
+            if not payload:
+                raise HTTPException(status_code=400, detail="Uploaded image is empty.")
+
+            request = ImageEditJobRequest(
+                prompt=prompt,
+                negative_prompt=negative_prompt,
+                max_width=max_width,
+                max_height=max_height,
+                steps=steps,
+                cfg_scale=cfg_scale,
+                seed=seed,
+                sampler=sampler,
+                scheduler=scheduler,
+                denoise=denoise,
+                save_to_disk=save_to_disk,
+                filename=filename,
+                image_bytes=payload,
+            )
+            result = await service.generate(request)  # type: ignore[arg-type]
+            await store.add(result.job_id, result.image_bytes)
+            base64_png = (
+                base64.b64encode(result.image_bytes).decode("ascii") if include_base64 else None
+            )
+            saved_path = str(result.saved_path) if result.saved_path else None
+            return GenerationResponse(
+                job_id=result.job_id,
+                image_url=f"/api/image/{result.job_id}",
+                saved_path=saved_path,
+                base64_png=base64_png,
+            )
 
     @app.get("/api/image/{job_id}")
     async def get_image(job_id: str) -> StreamingResponse:
@@ -260,6 +428,7 @@ def create_app(service: ComfyService, store: ResultStore) -> FastAPI:
             "start_time": app.state.start_time,
             "last_used": service.last_used(),
             "uptime": time.monotonic() - app.state.start_time,
+            "pipeline": pipeline,
             "loras": lora_data,
         }
 
@@ -283,9 +452,12 @@ def _ensure_signal_handlers(server: uvicorn.Server) -> None:
 
 async def _run_server(args: argparse.Namespace, loras: Sequence[comfy_bridge.LoraSpec]) -> None:
     output_dir = Path(args.output_dir)
-    service = ComfyService(output_dir=output_dir, loras=loras)
+    if args.pipeline == "generate":
+        service: ComfyService | ImageEditService = ComfyService(output_dir=output_dir, loras=loras)
+    else:
+        service = ImageEditService(output_dir=output_dir, loras=loras)
     store = ResultStore(ttl_seconds=args.result_ttl)
-    app = create_app(service, store)
+    app = create_app(service, store, args.pipeline)
     config = uvicorn.Config(
         app,
         host=args.host,
@@ -363,6 +535,12 @@ def cli(argv: Optional[list[str]] = None) -> None:
         "--verbose",
         action="store_true",
         help="Enable debug logging.",
+    )
+    parser.add_argument(
+        "--pipeline",
+        choices=("generate", "image-edit"),
+        default="generate",
+        help="Select which Comfy pipeline to load (default: generate).",
     )
 
     args = parser.parse_args(argv)

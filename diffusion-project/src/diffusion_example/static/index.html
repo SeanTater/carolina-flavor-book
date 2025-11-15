@@ -115,12 +115,27 @@
         font-size: 0.95rem;
         color: rgba(255, 255, 255, 0.75);
       }
+      .banner {
+        margin-bottom: 1rem;
+        padding: 0.75rem 1rem;
+        border-radius: 12px;
+        background: rgba(94, 129, 255, 0.15);
+        color: #dbe3ff;
+        font-weight: 600;
+      }
+
+      .hint {
+        font-size: 0.85rem;
+        color: rgba(255, 255, 255, 0.6);
+        margin-top: 0.35rem;
+      }
     </style>
   </head>
   <body>
     <main>
       <h1>Local Diffusion</h1>
-      <p>Generate images through the Comfy-backed FastAPI server.</p>
+      <p id="mode-description">Generate images through the Comfy-backed FastAPI server.</p>
+      <div id="pipeline-banner" class="banner">Detecting active pipeline...</div>
       <form id="generation-form">
         <label>
           Prompt
@@ -130,7 +145,12 @@
           Negative Prompt
           <input id="negative" placeholder="Optional negative prompt" />
         </label>
-        <div class="controls">
+        <label id="edit-image-wrapper" hidden>
+          Image for editing
+          <input id="edit-image" type="file" accept="image/*" />
+          <span class="hint">Upload the photo to edit. Only used in edit mode.</span>
+        </label>
+        <div class="controls" id="generate-dimensions">
           <label>
             Width
             <input id="width" type="number" value="1664" step="8" min="256" max="2048" />
@@ -152,6 +172,33 @@
             <input id="seed" type="number" placeholder="Random if blank" />
           </label>
         </div>
+        <div class="controls" id="edit-dimensions" hidden>
+          <label>
+            Max Width
+            <input id="max-width" type="number" value="1664" step="16" min="16" max="2048" />
+          </label>
+          <label>
+            Max Height
+            <input id="max-height" type="number" value="928" step="16" min="16" max="2048" />
+          </label>
+          <label>
+            Steps
+            <input id="edit-steps" type="number" value="30" min="1" max="200" />
+          </label>
+          <label>
+            CFG Scale
+            <input id="edit-cfg" type="number" value="4.0" step="0.5" min="0" max="20" />
+          </label>
+          <label>
+            Denoise
+            <input id="edit-denoise" type="number" value="1.0" step="0.05" min="0" max="1" />
+            <span class="hint">Lower values keep more of the original photo.</span>
+          </label>
+          <label>
+            Seed (optional)
+            <input id="edit-seed" type="number" placeholder="Random if blank" />
+          </label>
+        </div>
         <label>
           Save filename (optional)
           <input id="filename" placeholder="e.g. qwen_sample.png" />
@@ -166,7 +213,7 @@
             Return base64
           </label>
         </div>
-        <button type="submit">Generate</button>
+        <button type="submit" id="submit-button">Generate</button>
       </form>
       <section id="preview">
         <div class="status" id="status">Awaiting prompt...</div>
@@ -177,6 +224,42 @@
       const form = document.getElementById("generation-form");
       const statusEl = document.getElementById("status");
       const resultImg = document.getElementById("result-image");
+      const pipelineBanner = document.getElementById("pipeline-banner");
+      const modeDescription = document.getElementById("mode-description");
+      const submitButton = document.getElementById("submit-button");
+      const generateDimensions = document.getElementById("generate-dimensions");
+      const editDimensions = document.getElementById("edit-dimensions");
+      const editImageWrapper = document.getElementById("edit-image-wrapper");
+
+      let activePipeline = "generate";
+
+      async function detectPipeline() {
+        try {
+          const response = await fetch("/api/status", { cache: "no-store" });
+          if (!response.ok) {
+            throw new Error();
+          }
+          const data = await response.json();
+          setPipeline(data.pipeline || "generate");
+        } catch {
+          setPipeline("generate");
+        }
+      }
+
+      function setPipeline(pipeline) {
+        activePipeline = pipeline === "image-edit" ? "image-edit" : "generate";
+        const isEdit = activePipeline === "image-edit";
+        pipelineBanner.textContent = isEdit
+          ? "Image Edit mode active — upload a photo to transform it."
+          : "Text-to-image mode active — prompts create brand new scenes.";
+        modeDescription.textContent = isEdit
+          ? "Apply Qwen Image Edit to uploaded photos."
+          : "Generate images through the Comfy-backed FastAPI server.";
+        submitButton.textContent = isEdit ? "Apply Edit" : "Generate";
+        generateDimensions.hidden = isEdit;
+        editDimensions.hidden = !isEdit;
+        editImageWrapper.hidden = !isEdit;
+      }
 
       async function handleSubmit(event) {
         event.preventDefault();
@@ -185,29 +268,71 @@
         statusEl.textContent = "Generating image...";
         resultImg.hidden = true;
 
-        const payload = {
-          prompt: document.getElementById("prompt").value.trim(),
-          negative_prompt: document.getElementById("negative").value.trim(),
-          width: Number(document.getElementById("width").value),
-          height: Number(document.getElementById("height").value),
-          steps: Number(document.getElementById("steps").value),
-          cfg_scale: Number(document.getElementById("cfg").value),
-          seed: document.getElementById("seed").value
-            ? Number(document.getElementById("seed").value)
-            : null,
-          save_to_disk: document.getElementById("save").checked,
-          filename: document.getElementById("filename").value || null,
-          include_base64: document.getElementById("base64").checked,
-        };
+        const prompt = document.getElementById("prompt").value.trim();
+        if (!prompt) {
+          statusEl.textContent = "Prompt is required.";
+          button.disabled = false;
+          return;
+        }
 
         try {
-          const response = await fetch("/api/generate", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify(payload),
-          });
+          let response;
+          if (activePipeline === "image-edit") {
+            const imageInput = document.getElementById("edit-image");
+            if (!imageInput.files.length) {
+              statusEl.textContent = "Please select an image to edit.";
+              button.disabled = false;
+              return;
+            }
+            const formData = new FormData();
+            formData.append("prompt", prompt);
+            formData.append("negative_prompt", document.getElementById("negative").value.trim());
+            formData.append("max_width", document.getElementById("max-width").value);
+            formData.append("max_height", document.getElementById("max-height").value);
+            formData.append("steps", document.getElementById("edit-steps").value);
+            formData.append("cfg_scale", document.getElementById("edit-cfg").value);
+            formData.append("denoise", document.getElementById("edit-denoise").value);
+            const editSeed = document.getElementById("edit-seed").value;
+            if (editSeed) {
+              formData.append("seed", editSeed);
+            }
+            formData.append("save_to_disk", document.getElementById("save").checked ? "true" : "false");
+            const filename = document.getElementById("filename").value;
+            if (filename) {
+              formData.append("filename", filename);
+            }
+            formData.append("include_base64", document.getElementById("base64").checked ? "true" : "false");
+            formData.append("image", imageInput.files[0]);
+
+            response = await fetch("/api/image-edit", {
+              method: "POST",
+              body: formData,
+            });
+          } else {
+            const payload = {
+              prompt,
+              negative_prompt: document.getElementById("negative").value.trim(),
+              width: Number(document.getElementById("width").value),
+              height: Number(document.getElementById("height").value),
+              steps: Number(document.getElementById("steps").value),
+              cfg_scale: Number(document.getElementById("cfg").value),
+              seed: document.getElementById("seed").value
+                ? Number(document.getElementById("seed").value)
+                : null,
+              save_to_disk: document.getElementById("save").checked,
+              filename: document.getElementById("filename").value || null,
+              include_base64: document.getElementById("base64").checked,
+            };
+
+            response = await fetch("/api/generate", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify(payload),
+            });
+          }
+
           if (!response.ok) {
             const error = await response.json().catch(() => ({}));
             throw new Error(error.detail || response.statusText);
@@ -232,6 +357,7 @@
       }
 
       form.addEventListener("submit", handleSubmit);
+      detectPipeline();
     </script>
   </body>
 </html>
