@@ -31,4 +31,5 @@ pub struct RevisionForUpload {
 pub struct ImageForUpload {
     pub category: String,
     pub content_bytes: Vec<u8>,
+    pub prompt: Option<String>,
 }

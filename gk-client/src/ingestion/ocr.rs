@@ -10,6 +10,7 @@ use async_openai::types::{
 };
 
 use super::convert_to_webp;
+use super::llm::LlmConfig;
 
 /// Convert a webp image to a data URL
 ///
@@ -23,20 +24,7 @@ fn to_data_url(bytes: &[u8]) -> String {
     )
 }
 
-/// Performs OCR on a single image.
-///
-/// This function takes a `DynamicImage` instance, converts it to RGB8 format,
-/// prepares an input for the OCR engine, and then uses the engine to extract text
-/// from the image. The extracted text is returned as a string.
-///
-/// # Arguments
-///
-/// * `img`: A `DynamicImage` instance representing the image to perform OCR on.
-///
-/// # Returns
-///
-/// A `Result` containing the extracted text as a string, or an error if OCR fails.
-pub async fn read_text_from_image(img: &DynamicImage) -> Result<String> {
+pub async fn read_text_from_image(config: &LlmConfig, img: &DynamicImage) -> Result<String> {
     // This API supports DataURI images. So first we need to make this into WebP format, then base64, then wrap in a DataURI.
     if (img.height() * img.width()) > 2 << 20 {
         tracing::warn!(
@@ -48,8 +36,11 @@ pub async fn read_text_from_image(img: &DynamicImage) -> Result<String> {
     let img_webp = convert_to_webp(img, 0.8)?;
     let img_data_url = to_data_url(&img_webp);
 
+    let client = config.create_client()?;
+    let model = config.get_model();
+
     let request = CreateChatCompletionRequestArgs::default()
-        .model("gpt-4o-mini")
+        .model(&model)
         .messages([ChatCompletionRequestUserMessageArgs::default()
             .content(vec![
                 ChatCompletionRequestMessageContentPartTextArgs::default()
@@ -69,7 +60,7 @@ pub async fn read_text_from_image(img: &DynamicImage) -> Result<String> {
             .build()?
             .into()])
         .build()?;
-    super::llm::OpenAIClient
+    client
         .chat()
         .create(request)
         .await?
