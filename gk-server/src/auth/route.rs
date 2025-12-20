@@ -2,10 +2,7 @@ use axum::{
     extract::State,
     response::{IntoResponse, Redirect},
 };
-use axum_extra::extract::{
-    cookie::{Cookie, SameSite},
-    CookieJar,
-};
+use axum_extra::extract::{cookie::Cookie, CookieJar};
 
 use crate::errors::WebError;
 
