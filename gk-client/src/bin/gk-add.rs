@@ -35,6 +35,18 @@ pub struct Args {
     /// Directly upload a Revision with a specified source name, details, format, and content
     #[arg(long, num_args(4))]
     direct: Option<Vec<String>>,
+    /// LLM provider (openai or ollama)
+    #[arg(long)]
+    llm_provider: Option<String>,
+    /// LLM model name (e.g., gpt-4o-mini, llama3.1)
+    #[arg(long)]
+    llm_model: Option<String>,
+    /// Ollama base URL
+    #[arg(long)]
+    ollama_base_url: Option<String>,
+    /// Diffusion server base URL
+    #[arg(long)]
+    diffusion_base_url: Option<String>,
 }
 
 #[derive(Parser, Debug, Clone, PartialEq, Eq, ValueEnum)]
@@ -74,7 +86,19 @@ async fn main() -> Result<()> {
             format: format.clone(),
             details: Some(details.clone()),
         });
+        best_input_text.get_or_insert_with(|| content_text.clone());
     }
+
+    let llm_config = ingestion::LlmConfig {
+        provider: args.llm_provider.clone()
+            .or_else(|| dotenvy::var("LLM_PROVIDER").ok())
+            .unwrap_or_else(|| "openai".to_string()),
+        model: args.llm_model.clone()
+            .or_else(|| dotenvy::var("LLM_MODEL").ok()),
+        ollama_base_url: args.ollama_base_url.clone()
+            .or_else(|| dotenvy::var("OLLAMA_BASE_URL").ok())
+            .unwrap_or_else(|| "http://localhost:11434/v1".to_string()),
+    };
 
     if let Some(device_number) = args.webcam {
         println!("Webcam mode enabled");
@@ -86,12 +110,13 @@ async fn main() -> Result<()> {
             Rotate::R270 => picture.rotate270(),
         };
 
-        let content_text = ingestion::read_text_from_image(&picture).await?;
+        let content_text = ingestion::read_text_from_image(&llm_config, &picture).await?;
 
         let webp_bytes = ingestion::convert_to_webp(&picture, 75.0)?;
         images.push(basic_models::ImageForUpload {
             category: "raw scan".to_string(),
             content_bytes: webp_bytes,
+            prompt: None,
         });
 
         best_input_text = Some(content_text.clone());
@@ -118,32 +143,42 @@ async fn main() -> Result<()> {
 
     if args.freestyle {
         println!("Freestyle mode enabled");
-        let better_text = ingestion::freestyle(&args.name).await?;
+        let better_text = ingestion::freestyle(&llm_config, &args.name).await?;
         best_input_text = Some(better_text.clone());
         revisions.push(basic_models::RevisionForUpload {
             source_name: "llm".to_string(),
             content_text: better_text,
             format: "markdown".to_string(),
-            details: Some("{\"model\": \"gpt-4o-mini\"}".to_string()),
+            details: Some(format!("{{\"model\": \"{}\"}}", llm_config.get_model())),
         });
         tags.push("freestyle".to_string());
     }
 
-    if let Some(content_text) = best_input_text {
+    if let Some(content_text) = best_input_text.as_ref() {
         if !args.freestyle {
-            let better_text = ingestion::improve_recipe_with_llm(&content_text).await?;
+            let better_text = ingestion::improve_recipe_with_llm(&llm_config, content_text).await?;
+            best_input_text = Some(better_text.clone());
 
             revisions.push(basic_models::RevisionForUpload {
                 source_name: "llm".to_string(),
                 content_text: better_text,
                 format: "markdown".to_string(),
-                details: Some("{\"model\": \"gpt-4o-mini\"}".to_string()),
+                details: Some(format!("{{\"model\": \"{}\"}}", llm_config.get_model())),
             });
         }
     }
 
     if args.illustrate {
-        images.extend_from_slice(&ingestion::illustrate_recipe(&args.name).await?);
+        let diffusion_base_url = args.diffusion_base_url
+            .or_else(|| dotenvy::var("DIFFUSION_BASE_URL").ok())
+            .unwrap_or_else(|| "http://localhost:8000".to_string());
+        let illustration_source = best_input_text
+            .clone()
+            .unwrap_or_else(|| args.name.clone());
+        images.extend_from_slice(
+            &ingestion::illustrate_recipe(&llm_config, &diffusion_base_url, &illustration_source)
+                .await?,
+        );
     }
 
     let recipe_upload = basic_models::RecipeForUpload {

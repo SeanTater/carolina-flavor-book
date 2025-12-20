@@ -303,6 +303,7 @@ async fn upload_image(
         basic_models::ImageForUpload {
             category,
             content_bytes: image_bytes.to_vec(),
+            prompt: None,
         },
     )
     .await?;

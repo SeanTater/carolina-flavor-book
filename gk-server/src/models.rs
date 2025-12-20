@@ -86,7 +86,7 @@ impl Recipe {
     /// Get all the images for a recipe
     pub fn get_images(&self, db: &Database) -> Result<Vec<Image>> {
         db.collect_rows(
-            "SELECT image_id, recipe_id, category, format FROM Image WHERE recipe_id = ?",
+            "SELECT image_id, recipe_id, category, format, prompt FROM Image WHERE recipe_id = ?",
             params![self.recipe_id],
         )
     }
@@ -241,6 +241,7 @@ pub struct Image {
     pub recipe_id: i64,
     pub category: String,
     pub format: String,
+    pub prompt: Option<String>,
 }
 
 impl FromRow for Image {
@@ -250,6 +251,7 @@ impl FromRow for Image {
             recipe_id: row.get("recipe_id")?,
             category: row.get("category")?,
             format: row.get("format")?,
+            prompt: row.get("prompt")?,
         })
     }
 }
@@ -258,7 +260,7 @@ impl Image {
     pub fn get_image(db: &Database, image_id: i64) -> Result<Option<Image>> {
         Ok(db
             .collect_rows(
-                "SELECT image_id, recipe_id, category, format FROM Image WHERE image_id = ?",
+                "SELECT image_id, recipe_id, category, format, prompt FROM Image WHERE image_id = ?",
                 params![image_id],
             )?
             .pop())
@@ -270,14 +272,20 @@ impl Image {
         upload: basic_models::ImageForUpload,
     ) -> Result<()> {
         let conn = db.pool.get()?;
+        // Destructure for easier ownership handling
+        let basic_models::ImageForUpload {
+            category,
+            content_bytes: original_bytes,
+            prompt,
+        } = upload;
         // Do some rudimentary validation
         anyhow::ensure!(
-            upload.content_bytes.len() < 20_000_000,
+            original_bytes.len() < 20_000_000,
             "Image is too large"
         );
         // Check that it decodes as webp
         let mut img =
-            image::load_from_memory_with_format(&upload.content_bytes, image::ImageFormat::WebP)?;
+            image::load_from_memory_with_format(&original_bytes, image::ImageFormat::WebP)?;
         // If it's larger than 2048x2048, resize it
         img = if img.width() > 2048 || img.height() > 2048 {
             img.resize_to_fill(2048, 2048, image::imageops::FilterType::Lanczos3)
@@ -293,9 +301,9 @@ impl Image {
             .to_vec();
 
         conn.execute(
-            "INSERT INTO Image (recipe_id, category, format)
-            VALUES (?, ?, 'webp')",
-            params![recipe_id, upload.category, &content_bytes[..]],
+            "INSERT INTO Image (recipe_id, category, format, content_bytes, prompt)
+            VALUES (?, ?, 'webp', ?, ?)",
+            params![recipe_id, category, &content_bytes[..], prompt],
         )?;
 
         Ok(())
