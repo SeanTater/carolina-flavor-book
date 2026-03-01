@@ -124,4 +124,4 @@ cargo test --workspace
 
 ## Notes on deployment
 - `gk-server.service` shows a systemd unit for running a built binary.
-- `gk-server/launch-in-prod-docker.sh` documents the Docker deployment flow.
+- `task run-local` builds and runs the server in Docker locally.
