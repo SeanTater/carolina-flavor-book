@@ -11,6 +11,8 @@ This guide sets up gk-server and Cloudflare Tunnel on a fresh Ubuntu/Debian host
 
 ## 1. Build the server
 
+Run this as your normal user (not root) to avoid creating root-owned files in the repo:
+
 ```sh
 cargo build --release -p gk-server
 ```
@@ -46,7 +48,16 @@ Fill in the secrets:
 - `service_principal_secret`: generate with `openssl rand -hex 32`
 - `password_hash`: generate with `python3 -c "import bcrypt; print(bcrypt.hashpw(b'YOUR_PASSWORD', bcrypt.gensalt()).decode())"`
 
-## 5. Copy data (if migrating)
+## 5. Install the embedding model
+
+The server needs the `snowflake-arctic-embed-xs` model files. Copy them to the service's working directory:
+
+```sh
+sudo cp -r models /var/lib/gk-server/
+sudo chown -R gk:gk /var/lib/gk-server/models
+```
+
+## 6. Copy data (if migrating)
 
 ```sh
 sudo cp data/recipes.db /var/lib/gk-server/
@@ -55,7 +66,7 @@ sudo chown gk:gk /var/lib/gk-server/recipes.db
 
 For a fresh install, the server creates the database on first run.
 
-## 6. Install the gk-server systemd service
+## 7. Install the gk-server systemd service
 
 ```sh
 sudo cp gk-server.service /etc/systemd/system/
@@ -64,7 +75,7 @@ sudo systemctl enable --now gk-server
 sudo systemctl status gk-server
 ```
 
-## 7. Set up Cloudflare Tunnel
+## 8. Set up Cloudflare Tunnel
 
 Authenticate (opens a browser):
 
@@ -108,7 +119,7 @@ sudo systemctl enable --now cloudflared
 sudo systemctl status cloudflared
 ```
 
-## 8. Verify
+## 9. Verify
 
 ```sh
 curl https://gallagher.kitchen/health
