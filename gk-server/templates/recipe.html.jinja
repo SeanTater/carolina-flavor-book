@@ -2,7 +2,7 @@
 
 {% block content %}
 <full-recipe>
-    {{ recipe.best_revision.rendered }}
+    {{ recipe.best_revision.rendered|safe }}
 </full-recipe>
 <hr>
 <h3> All Revisions </h3>
