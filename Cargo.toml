@@ -51,8 +51,5 @@ webp = "0.3.0"
 async-openai = { version = "0.23.4" } # Local only
 
 
-ndarray = { version = "0.16.1" } # Local only
-rustronomy-watershed = { git = "https://github.com/SeanTater/rustronomy-watershed.git", branch = "feature/colored-segmenting-watershed" }  # Local only
-
 tempfile = { version = "3.19.1" } # Local only
 v4l = { version = "0.14.0" } # Local only
