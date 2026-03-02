@@ -35,3 +35,30 @@ impl IntoResponse for WebError {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn error_status_codes() {
+        let cases = vec![
+            (
+                WebError::NotFound,
+                http::StatusCode::NOT_FOUND,
+            ),
+            (
+                WebError::Auth("bad token".into()),
+                http::StatusCode::UNAUTHORIZED,
+            ),
+            (
+                WebError::Internal(anyhow::anyhow!("boom")),
+                http::StatusCode::INTERNAL_SERVER_ERROR,
+            ),
+        ];
+        for (error, expected_status) in cases {
+            let response = error.into_response();
+            assert_eq!(response.status(), expected_status);
+        }
+    }
+}

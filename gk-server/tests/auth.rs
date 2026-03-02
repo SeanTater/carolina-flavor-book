@@ -1,13 +1,13 @@
+#[allow(dead_code)]
+mod common;
+
 use axum::{
     body::Body,
     http::{Request, StatusCode},
     routing::get,
     Json, Router,
 };
-use gk_server::{
-    auth::{self, session::AuthenticatedUser, AuthService},
-    config::{AuthConfig, UserCredential},
-};
+use gk_server::auth::{self, session::AuthenticatedUser, AuthService};
 use tower::ServiceExt;
 
 /// Build a minimal router with just auth routes for testing.
@@ -36,21 +36,6 @@ async fn auth_check(user: AuthenticatedUser) -> Json<serde_json::Value> {
     }
 }
 
-/// Create test AuthService with a known user and secret.
-async fn test_auth_service() -> AuthService {
-    let password = "testpassword123";
-    let hash = bcrypt::hash(password, 4).unwrap(); // cost=4 for fast tests
-    let config = AuthConfig {
-        service_principal_secret: "test-secret-token".into(),
-        session_storage_path: "/tmp/gk-test-sessions.json".into(),
-        users: vec![UserCredential {
-            username: "testuser".into(),
-            password_hash: hash,
-        }],
-    };
-    AuthService::new_from_config(&config).await.unwrap()
-}
-
 async fn body_string(body: Body) -> String {
     String::from_utf8(
         axum::body::to_bytes(body, usize::MAX)
@@ -67,7 +52,7 @@ async fn body_json(body: Body) -> serde_json::Value {
 
 #[tokio::test]
 async fn login_page_renders() {
-    let app = test_app(test_auth_service().await);
+    let app = test_app(common::test_auth().await);
     let resp = app
         .oneshot(
             Request::builder()
@@ -88,7 +73,7 @@ async fn login_page_renders() {
 
 #[tokio::test]
 async fn login_with_correct_password_redirects() {
-    let app = test_app(test_auth_service().await);
+    let app = test_app(common::test_auth().await);
     let resp = app
         .oneshot(
             Request::builder()
@@ -115,7 +100,7 @@ async fn login_with_correct_password_redirects() {
 
 #[tokio::test]
 async fn login_with_wrong_password_fails() {
-    let app = test_app(test_auth_service().await);
+    let app = test_app(common::test_auth().await);
     let resp = app
         .oneshot(
             Request::builder()
@@ -134,7 +119,7 @@ async fn login_with_wrong_password_fails() {
 
 #[tokio::test]
 async fn login_with_unknown_user_fails() {
-    let app = test_app(test_auth_service().await);
+    let app = test_app(common::test_auth().await);
     let resp = app
         .oneshot(
             Request::builder()
@@ -151,7 +136,7 @@ async fn login_with_unknown_user_fails() {
 
 #[tokio::test]
 async fn service_principal_auth_works() {
-    let app = test_app(test_auth_service().await);
+    let app = test_app(common::test_auth().await);
     let resp = app
         .oneshot(
             Request::builder()
@@ -170,7 +155,7 @@ async fn service_principal_auth_works() {
 
 #[tokio::test]
 async fn service_principal_wrong_token_rejected() {
-    let app = test_app(test_auth_service().await);
+    let app = test_app(common::test_auth().await);
     let resp = app
         .oneshot(
             Request::builder()
@@ -186,7 +171,7 @@ async fn service_principal_wrong_token_rejected() {
 
 #[tokio::test]
 async fn no_auth_rejected() {
-    let app = test_app(test_auth_service().await);
+    let app = test_app(common::test_auth().await);
     let resp = app
         .oneshot(
             Request::builder()
@@ -201,7 +186,7 @@ async fn no_auth_rejected() {
 
 #[tokio::test]
 async fn session_cookie_auth_works() {
-    let auth = test_auth_service().await;
+    let auth = common::test_auth().await;
     let app = test_app(auth.clone());
 
     // First login to get a session cookie

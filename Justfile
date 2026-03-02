@@ -12,10 +12,23 @@ deploy: build
     sudo cp target/release/gk-server /opt/gk-server/
     sudo systemctl start gk-server
 
-# Run workspace tests
+# Run workspace tests (including doctests)
 test:
     cargo test --workspace
+    cargo test --workspace --doc
 
 # Check prod server status
 status:
     sudo systemctl status gk-server
+
+# Tag a release: just release 0.3.1
+release version:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    # Update workspace version
+    sed -i 's/^version = ".*"/version = "{{version}}"/' Cargo.toml
+    cargo check --workspace
+    git add -A
+    git commit -m "Release v{{version}}"
+    git tag "v{{version}}"
+    echo "Tagged v{{version}}. Push with: git push && git push --tags"

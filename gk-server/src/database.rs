@@ -15,6 +15,20 @@ impl Database {
         Ok(me)
     }
 
+    /// Connect to an in-memory SQLite database for testing.
+    /// Uses shared cache mode so multiple connections share the same in-memory DB.
+    pub async fn connect_memory() -> Result<Self> {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static COUNTER: AtomicU64 = AtomicU64::new(0);
+        let id = COUNTER.fetch_add(1, Ordering::Relaxed);
+        let uri = format!("file:memdb{}?mode=memory&cache=shared", id);
+        let manager = r2d2_sqlite::SqliteConnectionManager::file(uri);
+        let pool = r2d2::Pool::new(manager)?;
+        let me = Self { pool };
+        me.migrate().await?;
+        Ok(me)
+    }
+
     /// Migrate the database to the latest version.
     async fn migrate(&self) -> Result<()> {
         let migrations = [

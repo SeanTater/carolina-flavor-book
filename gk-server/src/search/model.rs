@@ -8,10 +8,15 @@ use itertools::Itertools;
 
 #[derive(Clone)]
 pub struct EmbeddingModel {
-    model: Arc<Mutex<TextEmbedding>>,
+    model: Arc<Mutex<Option<TextEmbedding>>>,
 }
 
 impl EmbeddingModel {
+    /// Create a placeholder model that panics if used. For testing only.
+    pub fn dangling() -> Self {
+        Self { model: Arc::new(Mutex::new(None)) }
+    }
+
     pub fn new() -> Result<Self> {
         use std::fs::read;
         let base = PathBuf::from("models/snowflake-arctic-embed-xs");
@@ -25,10 +30,10 @@ impl EmbeddingModel {
             },
         );
         Ok(Self {
-            model: Arc::new(Mutex::new(TextEmbedding::try_new_from_user_defined(
+            model: Arc::new(Mutex::new(Some(TextEmbedding::try_new_from_user_defined(
                 user_model,
                 InitOptionsUserDefined::default(),
-            )?)),
+            )?))),
         })
     }
 
@@ -41,10 +46,12 @@ impl EmbeddingModel {
             .iter()
             .map(|s| format!("{}{}", prefix, s.as_ref()))
             .collect_vec();
-        Ok(self
+        let mut guard = self
             .model
             .lock()
-            .map_err(|e| anyhow::anyhow!("Embedding model lock poisoned: {e}"))?
+            .map_err(|e| anyhow::anyhow!("Embedding model lock poisoned: {e}"))?;
+        let model = guard.as_mut().expect("embed() called on dangling EmbeddingModel");
+        Ok(model
             .embed(sentences, None)?
             .into_iter()
             .map(|e| e.iter().copied().map(f16::from_f32).collect_vec())

@@ -429,8 +429,8 @@ pub struct FullRecipe {
     pub best_revision: Option<Revision>,
 }
 
-/// Convert a slice of bytes into a vector of f32
-fn bytes_to_f16(bytes: &[u8]) -> Vec<f16> {
+/// Convert a slice of bytes into a vector of f16
+pub(crate) fn bytes_to_f16(bytes: &[u8]) -> Vec<f16> {
     bytes
         .chunks_exact(2)
         .map(|chunk| f16::from_le_bytes([chunk[0], chunk[1]]))
@@ -511,4 +511,17 @@ impl Embedding {
 pub enum ClaimType {
     GenerateImage,
     Unknown,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bytes_to_f16_roundtrip() {
+        let values = vec![f16::from_f32(1.0), f16::from_f32(-0.5), f16::from_f32(0.0)];
+        let bytes: Vec<u8> = values.iter().flat_map(|f| f.to_le_bytes()).collect();
+        let decoded = bytes_to_f16(&bytes);
+        assert_eq!(values, decoded);
+    }
 }

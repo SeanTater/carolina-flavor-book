@@ -3,6 +3,10 @@ members = ["gk", "gk-client", "gk-server"]
 resolver = "2"
 default-members = ["gk-server"]
 
+[workspace.package]
+version = "0.3.0"
+edition = "2021"
+
 [workspace.dependencies]
 anyhow = "1.0.98"
 axum = { version = "0.8.8", features = ["multipart"] }

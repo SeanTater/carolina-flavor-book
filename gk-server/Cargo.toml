@@ -1,7 +1,7 @@
 [package]
 name = "gk-server"
-version = "0.2.7"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
@@ -55,4 +55,6 @@ url-escape = { workspace = true }
 webp = { workspace = true }
 
 [dev-dependencies]
+bcrypt = "0.17"
+half = { workspace = true }
 tower = "0.5"

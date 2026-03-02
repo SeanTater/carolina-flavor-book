@@ -50,6 +50,27 @@ impl DocumentIndex {
 }
 
 impl DocumentIndexHandle {
+    /// Create an empty index with no embedder (for testing routes that don't use search).
+    /// Panics if `search()` or `search_tags()` is called.
+    pub fn empty(db: Database) -> Self {
+        let index = DocumentIndex {
+            db: db.clone(),
+            embedder: EmbeddingModel::dangling(),
+            embeddings: candle_core::Tensor::zeros(
+                (0, EMBEDDING_SIZE),
+                candle_core::DType::F16,
+                &candle_core::Device::Cpu,
+            )
+            .unwrap(),
+            recipe_ids: vec![],
+        };
+        Self {
+            db,
+            embedder: EmbeddingModel::dangling(),
+            index: Arc::new(RwLock::new(Arc::new(index))),
+        }
+    }
+
     /// A new empty document index.
     pub fn new(db: Database, embedder: EmbeddingModel) -> Self {
         let index = DocumentIndex {

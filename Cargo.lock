@@ -1631,14 +1631,14 @@ dependencies = [
 
 [[package]]
 name = "gk"
-version = "0.1.2"
+version = "0.3.0"
 dependencies = [
  "serde",
 ]
 
 [[package]]
 name = "gk-client"
-version = "0.1.2"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "async-openai",
@@ -1680,7 +1680,7 @@ dependencies = [
 
 [[package]]
 name = "gk-server"
-version = "0.2.7"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "axum",
