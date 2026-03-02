@@ -40,7 +40,7 @@ rusqlite = { features = ["bundled"], workspace = true }
 rustls = { features = ["ring"], workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-serde_yaml_ng = "0.10.0"
+toml = "1.0.3"
 strum = { features = ["derive"], workspace = true }
 thiserror = { workspace = true }
 tokio = { features = ["full"], workspace = true }

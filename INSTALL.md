@@ -39,8 +39,8 @@ sudo cp target/release/gk-server /opt/gk-server/
 Copy and edit the production config:
 
 ```sh
-sudo cp config/prod.yml /etc/gk-server/config.yml
-sudo editor /etc/gk-server/config.yml
+sudo cp config/prod.toml /etc/gk-server/config.toml
+sudo editor /etc/gk-server/config.toml
 ```
 
 Fill in the secrets:

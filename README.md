@@ -10,9 +10,9 @@ and a shared model crate used by both.
 2) Build the workspace:
    - `cargo build --workspace`
 3) Start the server:
-   - `cargo run -p gk-server -- config/dev.yml`
+   - `cargo run -p gk-server -- config/dev.toml`
 4) Set up your `.env` (for the CLI):
-   - `PRINCIPAL_SECRET` must match `auth.service_principal_secret` in `config/dev.yml`
+   - `PRINCIPAL_SECRET` must match `auth.service_principal_secret` in `config/dev.toml`
    - Optional: `OPENAI_API_KEY`, `LLM_PROVIDER`, `LLM_MODEL`, `OLLAMA_BASE_URL`
 5) Add a recipe:
    - `cargo run -p gk-client --bin gk-add -- "Apple Cake" --dictation --tag dessert`
@@ -50,10 +50,10 @@ This builds the `gk-server` image and runs it with:
 - `gk/` shared data models for client/server payloads.
 - `gk-client/` CLI ingestion tools (`gk-add`, `gk-auth-check`).
 - `gk-server/` Axum web/API server, templates, static assets, migrations.
-- `config/` YAML config files for the server (`dev.yml`, `prod.yml`).
+- `config/` TOML config files for the server (`dev.toml`, `prod.toml`).
 - `data/` runtime artifacts (SQLite database, session store, logs, sample images).
 - `models/` local embedding model files for search.
-- `Dockerfile`, `Taskfile.yml`, `gk-server.service` deployment helpers.
+- `Dockerfile`, `gk-server.service`, `Justfile` deployment helpers.
 
 ## Architecture overview
 1) `gk-client` ingests recipes via webcam, dictation, or direct text.
@@ -81,15 +81,15 @@ External services:
 - Diffusion service for image generation:
   - `gk-client` calls `POST {DIFFUSION_BASE_URL}/api/generate`.
   - Expected request/response shape is documented below.
-- Browser login uses username/password (bcrypt-hashed credentials in `config/*.yml`).
+- Browser login uses username/password (bcrypt-hashed credentials in `config/*.toml`).
 
 ## Server configuration
-`gk-server` reads YAML config files (`config/dev.yml`, `config/prod.yml`) with:
+`gk-server` reads TOML config files (`config/dev.toml`, `config/prod.toml`) with:
 - `server.address` and optional `server.tls` cert/key paths.
 - `database.path` for the SQLite database.
 - `auth.*` for username/password login, service principal token, and session storage.
 
-Note: `config/*.yml` includes secrets in this repo today. Treat them as private, and prefer
+Note: `config/*.toml` includes secrets in this repo today. Treat them as private, and prefer
 local `.env` overrides or secret management when deploying.
 
 Useful env vars:

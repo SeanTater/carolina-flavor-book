@@ -1,6 +1,6 @@
 # Run the dev server
 dev:
-    cargo run -- config/dev.yml
+    cargo run -- config/dev.toml
 
 # Build the release binary
 build:

@@ -8,10 +8,10 @@ pub struct Config {
 }
 
 impl Config {
-    /// Load the configuration from a YAML file.
-    pub fn load(yml_path: &str) -> anyhow::Result<Self> {
-        let yml = std::fs::read_to_string(yml_path)?;
-        let config = serde_yaml_ng::from_str(&yml)?;
+    /// Load the configuration from a TOML file.
+    pub fn load(path: &str) -> anyhow::Result<Self> {
+        let text = std::fs::read_to_string(path)?;
+        let config = toml::from_str(&text)?;
         Ok(config)
     }
 }
