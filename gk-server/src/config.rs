@@ -11,7 +11,7 @@ impl Config {
     /// Load the configuration from a YAML file.
     pub fn load(yml_path: &str) -> anyhow::Result<Self> {
         let yml = std::fs::read_to_string(yml_path)?;
-        let config = serde_yaml::from_str(&yml)?;
+        let config = serde_yaml_ng::from_str(&yml)?;
         Ok(config)
     }
 }

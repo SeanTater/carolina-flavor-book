@@ -5,9 +5,8 @@ edition = "2021"
 
 [dependencies]
 anyhow = { workspace = true }
-async-trait = { workspace = true }
 axum = { features = ["http2", "macros", "multipart"], workspace = true }
-axum-extra = { version = "0.9.4", features = ["cookie"] }
+axum-extra = { version = "0.10.1", features = ["cookie"] }
 axum-server = { features = ["rustls", "tls-rustls"], workspace = true }# Server only
 base64 = { workspace = true }
 bincode = { workspace = true }
@@ -30,19 +29,18 @@ bcrypt = "0.17"
 lazy_static = { workspace = true }
 log = { workspace = true }
 markdown = { workspace = true }
-minijinja = "2.3.1"
+minijinja = "2.16.0"
 r2d2 = { workspace = true }# Server only
 r2d2_sqlite = { workspace = true }# Server only
 rand = { workspace = true }
-regex = "1.10.6"
+regex = "1.12.3"
 reqwest = { features = ["rustls-tls"], default-features = false, workspace = true }
 
-rten = { workspace = true }
 rusqlite = { features = ["bundled"], workspace = true }
 rustls = { features = ["ring"], workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-serde_yaml = "0.9.34"
+serde_yaml_ng = "0.10.0"
 strum = { features = ["derive"], workspace = true }
 thiserror = { workspace = true }
 tokio = { features = ["full"], workspace = true }
@@ -50,7 +48,7 @@ tokio-retry = { workspace = true }
 
 tower-http = { features = ["compression-br", "trace"], workspace = true }# Server only
 tracing = { workspace = true }
-tracing-appender = "0.2.3"
+tracing-appender = "0.2.4"
 tracing-subscriber = { features = ["json", "env-filter", "tracing-log"], workspace = true }
 url-escape = { workspace = true }
 

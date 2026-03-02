@@ -14,7 +14,6 @@ use image::GenericImageView;
 use imageproc::contrast::ThresholdType;
 use imageproc::distance_transform::Norm;
 use lazy_static::lazy_static;
-use ocrs::ImageSource;
 use tokio::process::Command;
 use tokio_retry::Retry;
 

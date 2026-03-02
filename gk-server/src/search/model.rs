@@ -1,14 +1,14 @@
-use std::{path::PathBuf, sync::Arc};
+use std::{path::PathBuf, sync::{Arc, Mutex}};
 
 use anyhow::Result;
 use half::f16;
 
-use fastembed::{InitOptions, TextEmbedding, TokenizerFiles, UserDefinedEmbeddingModel};
+use fastembed::{InitOptionsUserDefined, TextEmbedding, TokenizerFiles, UserDefinedEmbeddingModel};
 use itertools::Itertools;
 
 #[derive(Clone)]
 pub struct EmbeddingModel {
-    model: Arc<TextEmbedding>,
+    model: Arc<Mutex<TextEmbedding>>,
 }
 
 impl EmbeddingModel {
@@ -25,11 +25,10 @@ impl EmbeddingModel {
             },
         );
         Ok(Self {
-            model: TextEmbedding::try_new_from_user_defined(
+            model: Arc::new(Mutex::new(TextEmbedding::try_new_from_user_defined(
                 user_model,
-                InitOptions::new(fastembed::EmbeddingModel::AllMiniLML6V2Q).into(),
-            )?
-            .into(),
+                InitOptionsUserDefined::default(),
+            )?)),
         })
     }
 
@@ -44,6 +43,8 @@ impl EmbeddingModel {
             .collect_vec();
         Ok(self
             .model
+            .lock()
+            .map_err(|e| anyhow::anyhow!("Embedding model lock poisoned: {e}"))?
             .embed(sentences, None)?
             .into_iter()
             .map(|e| e.iter().copied().map(f16::from_f32).collect_vec())

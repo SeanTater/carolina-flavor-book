@@ -121,22 +121,22 @@ async fn main() -> Result<()> {
         // `GET /api/auth/check` goes to `auth_check`
         .route("/api/auth/check", get(auth_check))
         // `GET /recipe/:recipe_id` goes to `get_recipe`
-        .route("/recipe/:recipe_id", get(get_recipe))
+        .route("/recipe/{recipe_id}", get(get_recipe))
         // `POST /search` goes to `search_recipes`
         .route("/search", get(search_recipes))
         // `GET /api/recipe_without_enough_images` goes to `get_any_recipe_without_enough_images`
         .route(
-            "/api/get-task/generate-image/:category",
+            "/api/get-task/generate-image/{category}",
             get(get_generate_image_task),
         )
         // `GET /api/image/:image_id` goes to `get_image`
-        .route("/image/:image_id", get(get_image))
+        .route("/image/{image_id}", get(get_image))
         // `POST /api/upload_image/:recipe_id/:category` goes to `upload_image`
-        .route("/api/image/:recipe_id/:category", post(upload_image))
+        .route("/api/image/{recipe_id}/{category}", post(upload_image))
         // `POST /api/upload_recipe` goes to `upload_recipe`
         .route("/api/recipe", post(upload_recipe))
         // serve static files from the `./src/static` directory
-        .route("/static/*path", get(serve_static))
+        .route("/static/{*path}", get(serve_static))
         .route("/auth/login", get(auth::route::login_page).post(auth::route::login_submit))
         .route("/auth/logout", get(auth::route::logout))
         .layer(

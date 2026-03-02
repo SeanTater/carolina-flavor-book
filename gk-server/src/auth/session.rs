@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 use axum::http::StatusCode;
-use axum::{async_trait, extract::FromRequestParts, http::request::Parts};
+use axum::{extract::FromRequestParts, http::request::Parts};
 
 pub type SessionID = U256;
 
@@ -46,7 +46,6 @@ impl Sessions {
     }
 }
 
-#[async_trait]
 impl<S> FromRequestParts<S> for UserSession
 where
     AuthService: FromRef<S>,
@@ -79,7 +78,6 @@ where
 /// Service principal authentication via Bearer token
 pub struct ServicePrincipal;
 
-#[async_trait]
 impl<S> FromRequestParts<S> for ServicePrincipal
 where
     AuthService: FromRef<S>,
@@ -120,7 +118,6 @@ pub enum AuthenticatedUser {
     ServicePrincipal,
 }
 
-#[async_trait]
 impl<S> FromRequestParts<S> for AuthenticatedUser
 where
     AuthService: FromRef<S>,
