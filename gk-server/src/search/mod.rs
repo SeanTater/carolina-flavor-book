@@ -122,21 +122,6 @@ impl DocumentIndexHandle {
     ///
     /// This function can return an error if there is a problem retrieving revisions from the database or if there
     /// is an error during the embedding process.
-    ///
-    /// # Examples
-    ///
-    /// ```rust,no_run
-    /// use myapp::database::Database;
-    /// use myapp::models::EmbeddingModel;
-    ///
-    /// let db = Database::connect();
-    /// let model = EmbeddingModel::new();
-    ///
-    /// match background_index_one_batch(db, &model).await {
-    ///     Ok(()) => println!("Batch indexing completed successfully."),
-    ///     Err(e) => eprintln!("Error during batch indexing: {:?}", e),
-    /// }
-    /// ```
     fn background_index_one_batch(db: Database, model: &EmbeddingModel) -> Result<usize> {
         let unindexed_revision =
             Revision::get_revisions_without_embeddings(&db, LATEST_MODEL_NAME, 1)?;
