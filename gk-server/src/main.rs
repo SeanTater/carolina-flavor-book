@@ -11,7 +11,7 @@ use base64::Engine;
 use clap::Parser;
 use gk::basic_models;
 use gk_server::{
-    auth::{self, session::AuthenticatedUser, OauthClient},
+    auth::{self, session::AuthenticatedUser, AuthService},
     config::Config,
     database::Database,
     errors::{WebError, WebResult},
@@ -64,7 +64,7 @@ struct Args {
 struct AppState {
     db: Database,
     doc_index: search::DocumentIndexHandle,
-    oauth: OauthClient,
+    auth: AuthService,
 }
 
 #[tokio::main]
@@ -97,7 +97,7 @@ async fn main() -> Result<()> {
         .context("Connecting to database")?;
 
     // Setup oauth, sessions, and authentication
-    let oauth = OauthClient::new_from_config(&config.auth)
+    let auth = AuthService::new_from_config(&config.auth)
         .await
         .context("Setting up authentication")?;
 
@@ -137,8 +137,7 @@ async fn main() -> Result<()> {
         .route("/api/recipe", post(upload_recipe))
         // serve static files from the `./src/static` directory
         .route("/static/*path", get(serve_static))
-        .route("/auth/login", get(auth::route::login))
-        .route("/auth/callback", get(auth::route::oauth_callback))
+        .route("/auth/login", get(auth::route::login_page).post(auth::route::login_submit))
         .route("/auth/logout", get(auth::route::logout))
         .layer(
             tower_http::compression::CompressionLayer::new()
@@ -148,7 +147,7 @@ async fn main() -> Result<()> {
         .with_state(AppState {
             db: default_db,
             doc_index: document_index.clone(),
-            oauth,
+            auth,
         });
 
     // In development, use HTTP. In production, use HTTPS.
@@ -227,8 +226,7 @@ async fn auth_check(user: AuthenticatedUser) -> Json<serde_json::Value> {
         AuthenticatedUser::Session(session) => Json(serde_json::json!({
             "authenticated": true,
             "method": "session",
-            "email": session.email,
-            "name": format!("{} {}", session.given_name, session.family_name),
+            "username": session.username,
         })),
         AuthenticatedUser::ServicePrincipal => Json(serde_json::json!({
             "authenticated": true,

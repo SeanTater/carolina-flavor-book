@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login | Gallagher Kitchen</title>
+    <link rel="stylesheet" href="/static/index.css">
+</head>
+
+<body>
+    <search-bar>
+        <h1><a href="/">Gallagher Kitchen</a></h1>
+    </search-bar>
+    <article>
+        <h2>Login</h2>
+        <form method="post" action="/auth/login" style="max-width: 20em;">
+            <p>
+                <label for="username">Username</label><br>
+                <input type="text" id="username" name="username" required autofocus>
+            </p>
+            <p>
+                <label for="password">Password</label><br>
+                <input type="password" id="password" name="password" required>
+            </p>
+            <p>
+                <button type="submit">Log in</button>
+            </p>
+        </form>
+    </article>
+</body>
+
+</html>

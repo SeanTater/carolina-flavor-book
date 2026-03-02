@@ -35,10 +35,13 @@ pub struct DatabaseConfig {
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct AuthConfig {
-    pub client_id: String,
-    pub client_secret: String,
-    pub redirect_uri: String,
-    pub session_storage_path: String,
-    pub audiences: Vec<String>,
     pub service_principal_secret: String,
+    pub session_storage_path: String,
+    pub users: Vec<UserCredential>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct UserCredential {
+    pub username: String,
+    pub password_hash: String,
 }

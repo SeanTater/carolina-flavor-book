@@ -1,35 +1,46 @@
 use axum::{
     extract::State,
-    response::{IntoResponse, Redirect},
+    response::{Html, IntoResponse, Redirect},
+    Form,
 };
 use axum_extra::extract::{cookie::Cookie, CookieJar};
+use serde::Deserialize;
 
-use crate::errors::WebError;
+use crypto_bigint::Encoding;
 
-use super::{OAuthQuery, OauthClient};
+use super::AuthService;
 
-pub async fn login(State(oauth): State<OauthClient>) -> Result<Redirect, WebError> {
-    let auth_url = oauth.authorize().await?;
-    Ok(Redirect::to(auth_url.as_str()))
+#[derive(Deserialize)]
+pub struct LoginForm {
+    username: String,
+    password: String,
 }
 
-pub async fn oauth_callback(
-    State(oauth): State<OauthClient>,
-    query: axum::extract::Query<OAuthQuery>, // Extract the authorization code and state
-    mut jar: CookieJar,                      // Extract the cookie jar
-) -> Result<(CookieJar, Redirect), WebError> {
-    let session = oauth.trade_for_session(query.0).await?;
-    let cookie = Cookie::build(("session_id", session.id.to_string()))
-        .http_only(true)
-        .path("/")
-        .secure(true);
-    jar = jar.add(cookie);
-    // Redirect to the home page or some post-login page.
-    Ok((jar, Redirect::to("/")))
+pub async fn login_page() -> Html<&'static str> {
+    Html(include_str!("../../templates/login.html.jinja"))
+}
+
+pub async fn login_submit(
+    State(auth): State<AuthService>,
+    mut jar: CookieJar,
+    Form(form): Form<LoginForm>,
+) -> Result<(CookieJar, Redirect), impl IntoResponse> {
+    match auth.verify_password(&form.username, &form.password) {
+        Some(session) => {
+            auth.sessions.sessions.insert(session.id, session.clone());
+            let cookie = Cookie::build(("session_id", hex::encode(session.id.to_be_bytes())))
+                .http_only(true)
+                .path("/");
+            jar = jar.add(cookie);
+            Ok((jar, Redirect::to("/")))
+        }
+        None => Err(Html(
+            "<html><body><h1>Login failed</h1><p>Invalid username or password.</p><a href=\"/auth/login\">Try again</a></body></html>",
+        )),
+    }
 }
 
 pub async fn logout(mut jar: CookieJar) -> impl IntoResponse {
-    // Clear the session/cookie to log the user out
     jar = jar.remove("session_id");
     (jar, Redirect::to("/"))
 }

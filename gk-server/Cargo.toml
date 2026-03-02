@@ -26,12 +26,11 @@ image = { workspace = true }
 imageproc = { workspace = true }
 include_dir = "0.7.4"
 itertools = { workspace = true }
-jsonwebtoken = "9.3.0"
+bcrypt = "0.17"
 lazy_static = { workspace = true }
 log = { workspace = true }
 markdown = { workspace = true }
 minijinja = "2.3.1"
-oauth2 = "4.4.2"
 r2d2 = { workspace = true }# Server only
 r2d2_sqlite = { workspace = true }# Server only
 rand = { workspace = true }
@@ -56,3 +55,6 @@ tracing-subscriber = { features = ["json", "env-filter", "tracing-log"], workspa
 url-escape = { workspace = true }
 
 webp = { workspace = true }
+
+[dev-dependencies]
+tower = "0.5"

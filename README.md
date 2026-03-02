@@ -81,13 +81,13 @@ External services:
 - Diffusion service for image generation:
   - `gk-client` calls `POST {DIFFUSION_BASE_URL}/api/generate`.
   - Expected request/response shape is documented below.
-- Google OAuth for browser login in `gk-server`.
+- Browser login uses username/password (bcrypt-hashed credentials in `config/*.yml`).
 
 ## Server configuration
 `gk-server` reads YAML config files (`config/dev.yml`, `config/prod.yml`) with:
 - `server.address` and optional `server.tls` cert/key paths.
 - `database.path` for the SQLite database.
-- `auth.*` for Google OAuth + service principal token + session storage path.
+- `auth.*` for username/password login, service principal token, and session storage.
 
 Note: `config/*.yml` includes secrets in this repo today. Treat them as private, and prefer
 local `.env` overrides or secret management when deploying.
