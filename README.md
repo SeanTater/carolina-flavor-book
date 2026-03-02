@@ -122,6 +122,6 @@ cargo clippy --workspace --all-targets
 cargo test --workspace
 ```
 
-## Notes on deployment
-- `gk-server.service` shows a systemd unit for running a built binary.
-- `task run-local` builds and runs the server in Docker locally.
+## Deployment
+- See [INSTALL.md](INSTALL.md) for production setup (systemd + Cloudflare Tunnel).
+- `task run-local` builds and runs the server in Docker for development.

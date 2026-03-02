@@ -1,12 +1,16 @@
 [Unit]
-Description=Gallagher Kitchen
+Description=Gallagher Kitchen recipe server
 After=network.target
 
 [Service]
-ExecStart=/app/gk-server-latest
+Type=simple
+User=gk
+Group=gk
+ExecStart=/opt/gk-server/gk-server /etc/gk-server/config.yml
+WorkingDirectory=/var/lib/gk-server
 Restart=always
 RestartSec=3
-WorkingDirectory=/app
+Environment=RUST_LOG=info,tower_http::trace::on_response=debug
 
 [Install]
-WantedBy=default.target
+WantedBy=multi-user.target
