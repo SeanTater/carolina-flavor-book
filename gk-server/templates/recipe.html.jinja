@@ -1,6 +1,10 @@
 {% extends "base.html.jinja" %}
 
 {% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center;">
+    <div></div>
+    <a href="/recipe/{{ recipe.recipe.recipe_id }}/edit" style="font-size: 0.9rem;">Edit</a>
+</div>
 <full-recipe>
     {{ recipe.best_revision.rendered|safe }}
 </full-recipe>

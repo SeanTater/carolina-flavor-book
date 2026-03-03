@@ -1,7 +1,26 @@
 {% extends "base.html.jinja" %}
 {% block title %}Recipes of the day{% endblock %}
 {% block content %}
-<!-- Render all the recipes in a list -->
+
+{% for section in sections %}
+<section class="front-page-section">
+    <h2>{{ section.title }}</h2>
+    {% if section.blurb %}<p class="section-blurb">{{ section.blurb }}</p>{% endif %}
+    <image-cards>
+        {% for recipe in section.recipes %}
+        <a href="/recipe/{{recipe.recipe_id}}">
+            <image-card>
+                <h4>{{recipe.name}}</h4>
+                <img src="/image/{{recipe.thumbnail_image_id}}"
+                    alt="{{recipe.name}}" loading="lazy">
+            </image-card>
+        </a>
+        {% endfor %}
+    </image-cards>
+</section>
+{% endfor %}
+
+<h2>Discover More</h2>
 <image-cards>
     {% for recipe in recipes %}
     <a href="/recipe/{{recipe.recipe_id}}">

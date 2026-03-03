@@ -1679,6 +1679,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "gk-content"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+ "axum",
+ "bcrypt",
+ "bincode",
+ "clap",
+ "gk",
+ "gk-server",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "toml",
+]
+
+[[package]]
 name = "gk-server"
 version = "0.3.0"
 dependencies = [

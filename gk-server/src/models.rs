@@ -20,6 +20,13 @@ pub struct Recipe {
     pub thumbnail_image_id: Option<i64>,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct RecipeWithText {
+    pub recipe_id: i64,
+    pub name: String,
+    pub content_text: String,
+}
+
 impl FromRow for Recipe {
     /// Create a new recipe from an sql row, provided by rusqlite, using named columns.
     fn from_row(row: &rusqlite::Row) -> rusqlite::Result<Self> {
@@ -37,6 +44,39 @@ impl Recipe {
     /// This doesn't join to get a thumbnail
     pub fn get_all_basics(db: &Database) -> Result<Vec<Recipe>> {
         db.collect_rows("SELECT * FROM Recipe", params![])
+    }
+
+    /// Get all recipes with their best revision text (for bulk export).
+    /// Uses the same source priority as get_full_recipe: manual > llm > ocr > name.
+    pub fn get_all_with_text(db: &Database) -> Result<Vec<RecipeWithText>> {
+        let conn = db.pool.get()?;
+        let mut stmt = conn.prepare(
+            "SELECT r.recipe_id, r.name, rev.content_text
+             FROM Recipe r
+             LEFT JOIN (
+                 SELECT recipe_id, content_text,
+                        ROW_NUMBER() OVER (
+                            PARTITION BY recipe_id
+                            ORDER BY CASE source_name
+                                WHEN 'manual' THEN 4
+                                WHEN 'llm' THEN 3
+                                WHEN 'ocr' THEN 2
+                                WHEN 'name' THEN 1
+                                ELSE 0
+                            END DESC,
+                            revision_id DESC
+                        ) AS rn
+                 FROM Revision
+             ) rev ON r.recipe_id = rev.recipe_id AND rev.rn = 1"
+        )?;
+        let rows = stmt.query_map(params![], |row| {
+            Ok(RecipeWithText {
+                recipe_id: row.get("recipe_id")?,
+                name: row.get("name")?,
+                content_text: row.get::<_, Option<String>>("content_text")?.unwrap_or_default(),
+            })
+        })?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
     }
 
     /// List all the recipes in the database.
@@ -200,6 +240,16 @@ impl Recipe {
         }
         Ok(recipe_id)
     }
+
+    /// Update the name of a recipe.
+    pub fn update_name(db: &Database, recipe_id: i64, name: &str) -> Result<()> {
+        let conn = db.pool.get()?;
+        conn.execute(
+            "UPDATE Recipe SET name = ? WHERE recipe_id = ?",
+            params![name, recipe_id],
+        )?;
+        Ok(())
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -232,6 +282,11 @@ impl Tag {
     /// Recipe ID is set to 0
     pub fn get_distinct(db: &Database) -> Result<Vec<Tag>> {
         db.collect_rows("SELECT 0 recipe_id, tag FROM Tag GROUP BY tag", params![])
+    }
+
+    /// Get all tags (every recipe_id + tag pair).
+    pub fn get_all(db: &Database) -> Result<Vec<Tag>> {
+        db.collect_rows("SELECT recipe_id, tag FROM Tag", params![])
     }
 }
 
@@ -503,6 +558,72 @@ impl Embedding {
                 embedding_bytes
             ])?;
         }
+        Ok(())
+    }
+}
+
+/// A front page section entry, keyed by date and section type.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct FrontPageSection {
+    pub date: String,
+    pub section: String,
+    pub title: String,
+    pub blurb: Option<String>,
+    pub query_tags: String,
+}
+
+impl FromRow for FrontPageSection {
+    fn from_row(row: &rusqlite::Row) -> rusqlite::Result<Self> {
+        Ok(Self {
+            date: row.get("date")?,
+            section: row.get("section")?,
+            title: row.get("title")?,
+            blurb: row.get("blurb")?,
+            query_tags: row.get("query_tags")?,
+        })
+    }
+}
+
+impl FrontPageSection {
+    /// Get all sections for a given date (MM-DD format).
+    pub fn get_for_date(db: &Database, date: &str) -> Result<Vec<Self>> {
+        db.collect_rows(
+            "SELECT * FROM FrontPageSection WHERE date = ?",
+            params![date],
+        )
+    }
+
+    /// Get recipe IDs matching any of the given tags.
+    pub fn get_recipe_ids_for_tags(db: &Database, tags: &[String], limit: usize) -> Result<Vec<i64>> {
+        if tags.is_empty() {
+            return Ok(vec![]);
+        }
+        let placeholders = tags.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+        let sql = format!(
+            "SELECT DISTINCT recipe_id FROM Tag WHERE tag IN ({}) LIMIT ?",
+            placeholders
+        );
+        let conn = db.pool.get()?;
+        let mut stmt = conn.prepare(&sql)?;
+        let mut all_params: Vec<Box<dyn rusqlite::types::ToSql>> = tags
+            .iter()
+            .map(|t| Box::new(t.clone()) as Box<dyn rusqlite::types::ToSql>)
+            .collect();
+        all_params.push(Box::new(limit as i64));
+        let rows = stmt.query_map(rusqlite::params_from_iter(all_params.iter()), |row| {
+            row.get::<_, i64>(0)
+        })?;
+        Ok(rows.filter_map(|r| r.ok()).collect())
+    }
+
+    /// Insert or replace a front page section.
+    pub fn upsert(db: &Database, section: &FrontPageSection) -> Result<()> {
+        let conn = db.pool.get()?;
+        conn.execute(
+            "INSERT OR REPLACE INTO FrontPageSection (date, section, title, blurb, query_tags)
+             VALUES (?, ?, ?, ?, ?)",
+            params![section.date, section.section, section.title, section.blurb, section.query_tags],
+        )?;
         Ok(())
     }
 }

@@ -1,0 +1,29 @@
+[package]
+name = "gk-content"
+version.workspace = true
+edition.workspace = true
+
+[lib]
+name = "gk_content"
+path = "src/lib.rs"
+
+[[bin]]
+name = "gk-content"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = { workspace = true }
+bincode = { workspace = true }
+clap = { workspace = true, features = ["derive"] }
+gk = { path = "../gk" }
+reqwest = { workspace = true, features = ["json", "rustls-tls"] }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["full"] }
+toml = "1.0.3"
+
+[dev-dependencies]
+axum = { workspace = true }
+bcrypt = "0.17"
+gk-server = { path = "../gk-server" }

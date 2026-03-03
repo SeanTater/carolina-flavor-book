@@ -1,5 +1,5 @@
 [workspace]
-members = ["gk", "gk-client", "gk-server"]
+members = ["gk", "gk-client", "gk-server", "gk-content"]
 resolver = "2"
 default-members = ["gk-server"]
 

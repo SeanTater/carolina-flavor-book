@@ -172,7 +172,7 @@ ul.long-list {
 
 nav {
     margin: 1rem auto;
-    max-width: 250px;
+    max-width: 400px;
     background: var(--bright-color);
     border-radius: 0.4rem;
     display: flex;

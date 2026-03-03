@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 use axum::http::StatusCode;
+use axum::response::{Html, IntoResponse, Response};
 use axum::{extract::FromRequestParts, http::request::Parts};
 
 pub type SessionID = U256;
@@ -123,7 +124,7 @@ where
     AuthService: FromRef<S>,
     S: Send + Sync,
 {
-    type Rejection = (StatusCode, &'static str);
+    type Rejection = AuthRejection;
 
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
         if let Ok(session) = UserSession::from_request_parts(parts, state).await {
@@ -134,6 +135,20 @@ where
             return Ok(Self::ServicePrincipal);
         }
 
-        Err((StatusCode::UNAUTHORIZED, "Authentication required"))
+        Err(AuthRejection)
+    }
+}
+
+pub struct AuthRejection;
+
+impl IntoResponse for AuthRejection {
+    fn into_response(self) -> Response {
+        let html = crate::TEMPLATES
+            .get_template("login-required.html.jinja")
+            .and_then(|t| t.render(minijinja::context! {}));
+        match html {
+            Ok(body) => (StatusCode::UNAUTHORIZED, Html(body)).into_response(),
+            Err(_) => (StatusCode::UNAUTHORIZED, "Authentication required").into_response(),
+        }
     }
 }

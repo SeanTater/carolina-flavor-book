@@ -40,6 +40,7 @@ impl Database {
             include_str!("migrations/06-names-are-revisions.sql"),
             include_str!("migrations/07-image-extra-index.sql"),
             include_str!("migrations/08-image-prompts.sql"),
+            include_str!("migrations/09-front-page-sections.sql"),
         ];
         // Find the current migration version. If it fails, we need to run all the migrations.
         let conn = self.pool.get()?;

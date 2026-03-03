@@ -7,7 +7,7 @@ pub mod search;
 
 use axum::{
     body::Bytes,
-    extract::{FromRef, Path, State},
+    extract::{FromRef, Multipart, Path, State},
     http::{header, StatusCode},
     response::{Html, IntoResponse, Redirect},
     routing::{get, post},
@@ -17,7 +17,7 @@ use base64::Engine;
 use errors::{WebError, WebResult};
 use gk::basic_models;
 use minijinja::context;
-use models::{FullRecipe, Image, ImageContent, Recipe};
+use models::{FrontPageSection, FullRecipe, Image, ImageContent, Recipe, Revision};
 use rand::seq::SliceRandom;
 use search::DocumentIndexHandle;
 use serde::Deserialize;
@@ -43,6 +43,8 @@ lazy_static::lazy_static! {
             ("search.html.jinja", include_str!("../templates/search.html.jinja")),
             ("base.html.jinja", include_str!("../templates/base.html.jinja")),
             ("browse-by-tag.html.jinja", include_str!("../templates/browse-by-tag.html.jinja")),
+            ("create-recipe.html.jinja", include_str!("../templates/create-recipe.html.jinja")),
+            ("login-required.html.jinja", include_str!("../templates/login-required.html.jinja")),
         ] {
             env.add_template(name, template)
                 .expect("Failed to register template");
@@ -74,7 +76,18 @@ pub fn build_app(state: AppState) -> Router {
         )
         .route("/image/{image_id}", get(get_image))
         .route("/api/image/{recipe_id}/{category}", post(upload_image))
+        .route("/recipe/new", get(create_recipe_page))
+        .route("/recipe/save", post(save_recipe)
+            .layer(axum::extract::DefaultBodyLimit::max(20 * 1024 * 1024)))
+        .route("/recipe/{recipe_id}/edit", get(edit_recipe_page)
+            .post(update_recipe)
+            .layer(axum::extract::DefaultBodyLimit::max(20 * 1024 * 1024)))
         .route("/api/recipe", post(upload_recipe))
+        .route("/api/tags/{recipe_id}", post(add_tags))
+        .route("/api/tags", get(get_all_tags))
+        .route("/api/recipes/basic", get(get_all_basics_api))
+        .route("/api/recipes/text", get(get_all_recipes_text))
+        .route("/api/schedule", post(upsert_schedule))
         .route("/static/{*path}", get(serve_static))
         .route("/auth/login", get(auth::route::login_page).post(auth::route::login_submit))
         .route("/auth/logout", get(auth::route::logout))
@@ -92,9 +105,25 @@ async fn root(State(db): State<database::Database>) -> WebResult<Html<String>> {
         .choose_multiple(&mut rand::thread_rng(), 20)
         .map(|r| r.recipe_id)
         .collect::<Vec<_>>();
+    let today = chrono::Local::now().format("%m-%d").to_string();
+    let sections = FrontPageSection::get_for_date(&db, &today).unwrap_or_default();
+    // For each section, resolve query_tags to actual recipes
+    let mut section_data = vec![];
+    for section in &sections {
+        let tags: Vec<String> = serde_json::from_str(&section.query_tags).unwrap_or_default();
+        let recipe_ids = FrontPageSection::get_recipe_ids_for_tags(&db, &tags, 6)?;
+        let recipes = Recipe::get_extended(&db, &recipe_ids)?;
+        section_data.push(context! {
+            title => section.title,
+            blurb => section.blurb,
+            section => section.section,
+            recipes => recipes,
+        });
+    }
     Ok(Html(TEMPLATES.get_template("index.html.jinja")?.render(
         context! {
             recipes => Recipe::get_extended(&db, &some_random_ids)?,
+            sections => section_data,
         },
     )?))
 }
@@ -219,6 +248,234 @@ async fn upload_recipe(
         .map_err(|e| anyhow::anyhow!("Deserializing recipe: {e}"))?;
     let recipe_id = Recipe::push(&db, recipe_upload).await?;
     Ok(Redirect::to(&format!("/recipe/{}", recipe_id)))
+}
+
+async fn create_recipe_page(_user: AuthenticatedUser) -> WebResult<Html<String>> {
+    Ok(Html(
+        TEMPLATES
+            .get_template("create-recipe.html.jinja")?
+            .render(context! {})?,
+    ))
+}
+
+async fn save_recipe(
+    _user: AuthenticatedUser,
+    State(db): State<database::Database>,
+    mut multipart: Multipart,
+) -> WebResult<impl IntoResponse> {
+    let mut name: Option<String> = None;
+    let mut content: Option<String> = None;
+    let mut image_bytes: Option<Vec<u8>> = None;
+
+    while let Some(field) = multipart
+        .next_field()
+        .await
+        .map_err(|e| anyhow::anyhow!("Reading multipart field: {e}"))?
+    {
+        match field.name() {
+            Some("name") => {
+                name = Some(
+                    field
+                        .text()
+                        .await
+                        .map_err(|e| anyhow::anyhow!("Reading name: {e}"))?,
+                );
+            }
+            Some("content") => {
+                content = Some(
+                    field
+                        .text()
+                        .await
+                        .map_err(|e| anyhow::anyhow!("Reading content: {e}"))?,
+                );
+            }
+            Some("image") => {
+                image_bytes = Some(
+                    field
+                        .bytes()
+                        .await
+                        .map_err(|e| anyhow::anyhow!("Reading image: {e}"))?
+                        .to_vec(),
+                );
+            }
+            _ => {}
+        }
+    }
+
+    let name = name.filter(|s| !s.is_empty()).ok_or_else(|| anyhow::anyhow!("Missing recipe name"))?;
+    let content = content.filter(|s| !s.is_empty()).ok_or_else(|| anyhow::anyhow!("Missing recipe content"))?;
+    let image_bytes = image_bytes.filter(|b| !b.is_empty()).ok_or_else(|| anyhow::anyhow!("Missing image"))?;
+
+    let upload = basic_models::RecipeForUpload {
+        name: name.clone(),
+        tags: vec!["manual".into()],
+        revisions: vec![basic_models::RevisionForUpload {
+            source_name: "manual".into(),
+            content_text: content,
+            format: "markdown".into(),
+            details: None,
+        }],
+        images: vec![],
+    };
+    let recipe_id = Recipe::push(&db, upload).await?;
+
+    // Convert uploaded image (any format) to WebP for Image::push
+    let img = image::load_from_memory(&image_bytes)
+        .map_err(|e| anyhow::anyhow!("Invalid image: {e}"))?;
+    let webp_bytes = webp::Encoder::from_image(&img)
+        .map_err(|e| anyhow::anyhow!("WebP encoding: {e:?}"))?
+        .encode(75.0)
+        .to_vec();
+
+    Image::push(
+        &db,
+        recipe_id,
+        basic_models::ImageForUpload {
+            category: "user-upload".into(),
+            content_bytes: webp_bytes,
+            prompt: None,
+        },
+    )
+    .await?;
+
+    Ok(Redirect::to(&format!("/recipe/{}", recipe_id)))
+}
+
+async fn edit_recipe_page(
+    _user: AuthenticatedUser,
+    State(db): State<database::Database>,
+    Path(recipe_id): Path<i64>,
+) -> WebResult<Html<String>> {
+    let recipe = Recipe::get_full_recipe(&db, recipe_id)?.ok_or(WebError::NotFound)?;
+    Ok(Html(
+        TEMPLATES
+            .get_template("create-recipe.html.jinja")?
+            .render(context! { recipe => recipe })?,
+    ))
+}
+
+async fn update_recipe(
+    _user: AuthenticatedUser,
+    State(db): State<database::Database>,
+    Path(recipe_id): Path<i64>,
+    mut multipart: Multipart,
+) -> WebResult<impl IntoResponse> {
+    let mut name: Option<String> = None;
+    let mut content: Option<String> = None;
+    let mut image_bytes: Option<Vec<u8>> = None;
+
+    while let Some(field) = multipart
+        .next_field()
+        .await
+        .map_err(|e| anyhow::anyhow!("Reading multipart field: {e}"))?
+    {
+        match field.name() {
+            Some("name") => {
+                name = Some(
+                    field
+                        .text()
+                        .await
+                        .map_err(|e| anyhow::anyhow!("Reading name: {e}"))?,
+                );
+            }
+            Some("content") => {
+                content = Some(
+                    field
+                        .text()
+                        .await
+                        .map_err(|e| anyhow::anyhow!("Reading content: {e}"))?,
+                );
+            }
+            Some("image") => {
+                image_bytes = Some(
+                    field
+                        .bytes()
+                        .await
+                        .map_err(|e| anyhow::anyhow!("Reading image: {e}"))?
+                        .to_vec(),
+                );
+            }
+            _ => {}
+        }
+    }
+
+    let name = name.filter(|s| !s.is_empty()).ok_or_else(|| anyhow::anyhow!("Missing recipe name"))?;
+    let content = content.filter(|s| !s.is_empty()).ok_or_else(|| anyhow::anyhow!("Missing recipe content"))?;
+
+    Recipe::update_name(&db, recipe_id, &name)?;
+    Revision::push(
+        &db,
+        basic_models::RevisionForUpload {
+            source_name: "manual".into(),
+            content_text: content,
+            format: "markdown".into(),
+            details: None,
+        },
+        recipe_id,
+    )?;
+
+    if let Some(image_bytes) = image_bytes.filter(|b| !b.is_empty()) {
+        let img = image::load_from_memory(&image_bytes)
+            .map_err(|e| anyhow::anyhow!("Invalid image: {e}"))?;
+        let webp_bytes = webp::Encoder::from_image(&img)
+            .map_err(|e| anyhow::anyhow!("WebP encoding: {e:?}"))?
+            .encode(75.0)
+            .to_vec();
+
+        Image::push(
+            &db,
+            recipe_id,
+            basic_models::ImageForUpload {
+                category: "user-upload".into(),
+                content_bytes: webp_bytes,
+                prompt: None,
+            },
+        )
+        .await?;
+    }
+
+    Ok(Redirect::to(&format!("/recipe/{}", recipe_id)))
+}
+
+async fn add_tags(
+    State(db): State<database::Database>,
+    Path(recipe_id): Path<i64>,
+    _: AuthenticatedUser,
+    Json(tags): Json<Vec<String>>,
+) -> WebResult<StatusCode> {
+    for tag in &tags {
+        models::Tag::push(&db, recipe_id, tag)?;
+    }
+    Ok(StatusCode::OK)
+}
+
+async fn get_all_tags(
+    State(db): State<database::Database>,
+) -> WebResult<Json<Vec<models::Tag>>> {
+    Ok(Json(models::Tag::get_all(&db)?))
+}
+
+async fn get_all_basics_api(
+    State(db): State<database::Database>,
+) -> WebResult<Json<Vec<Recipe>>> {
+    Ok(Json(Recipe::get_all_basics(&db)?))
+}
+
+async fn get_all_recipes_text(
+    State(db): State<database::Database>,
+) -> WebResult<Json<Vec<models::RecipeWithText>>> {
+    Ok(Json(Recipe::get_all_with_text(&db)?))
+}
+
+async fn upsert_schedule(
+    State(db): State<database::Database>,
+    _: AuthenticatedUser,
+    Json(sections): Json<Vec<FrontPageSection>>,
+) -> WebResult<StatusCode> {
+    for section in &sections {
+        FrontPageSection::upsert(&db, section)?;
+    }
+    Ok(StatusCode::OK)
 }
 
 async fn serve_static(Path(path): Path<String>) -> WebResult<impl IntoResponse> {

@@ -1,0 +1,164 @@
+{% extends "base.html.jinja" %}
+
+{% block title %}{% if recipe %}Edit Recipe{% else %}Add Recipe{% endif %}{% endblock %}
+
+{% block content %}
+<h2>{% if recipe %}Edit Recipe{% else %}Add a Recipe{% endif %}</h2>
+{% if not recipe %}
+<p>Paste a recipe from ChatGPT, Claude, or your own collection.</p>
+{% endif %}
+
+<form id="recipe-form" action="{% if recipe %}/recipe/{{ recipe.recipe.recipe_id }}/edit{% else %}/recipe/save{% endif %}" method="POST" enctype="multipart/form-data">
+    <label for="recipe-name">Recipe name</label>
+    <input type="text" id="recipe-name" name="name" placeholder="e.g. Spicy Thai basil chicken" required
+        {% if recipe %}value="{{ recipe.recipe.name }}"{% endif %}>
+
+    <label for="recipe-content">Recipe text (markdown)</label>
+    <textarea id="recipe-content" name="content" placeholder="Paste your recipe here..." required>{% if recipe %}{{ recipe.best_revision.content_text }}{% endif %}</textarea>
+
+    <div id="md-image-warning" style="display:none; background: #fff3cd; border: 1px solid #ffc107; border-radius: 0.4rem; padding: 0.75rem; margin: 0.25rem 0;">
+        <strong>Markdown images detected.</strong> These are unnecessary since you can upload a photo directly.
+        <button type="button" id="strip-images-btn" style="margin-left: 0.5rem; cursor: pointer;">Strip image links</button>
+    </div>
+
+    <label for="recipe-image">Photo</label>
+    <div id="image-drop" tabindex="0">
+        <input type="file" id="recipe-image" name="image" accept="image/*" {% if not recipe %}required{% endif %}>
+        <p id="image-hint">Choose a photo or paste from clipboard.{% if recipe %}<br>
+        <small>Leave empty to keep the current image.</small>{% else %}<br>
+        <small>Tip: ChatGPT and Gemini can generate beautiful recipe images.</small>{% endif %}</p>
+        <img id="image-preview" alt="Preview">
+    </div>
+
+    <button type="submit" id="submit-btn">{% if recipe %}Save Changes{% else %}Add Recipe{% endif %}</button>
+</form>
+
+<style>
+    #recipe-form {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+    #recipe-form label {
+        font-weight: 600;
+        margin-top: 0.5rem;
+    }
+    #recipe-form input[type="text"],
+    #recipe-form textarea {
+        width: 100%;
+        padding: 0.6em;
+        font-size: 1rem;
+        border: 2px solid var(--dim-color);
+        border-radius: 0.4rem;
+        font-family: inherit;
+    }
+    #recipe-form input[type="text"]:focus,
+    #recipe-form textarea:focus {
+        border-color: var(--primary-accent-color);
+        outline: none;
+    }
+    #recipe-form textarea {
+        min-height: 40vh;
+        resize: vertical;
+    }
+    #image-drop {
+        border: 2px dashed var(--dim-color);
+        border-radius: 0.4rem;
+        padding: 1rem;
+        text-align: center;
+        cursor: pointer;
+        position: relative;
+    }
+    #image-drop.has-image {
+        border-style: solid;
+        border-color: var(--primary-accent-color);
+    }
+    #image-preview {
+        display: none;
+        max-width: 100%;
+        max-height: 300px;
+        border-radius: 0.4rem;
+        margin-top: 0.5rem;
+    }
+    #image-drop.has-image #image-preview {
+        display: block;
+    }
+    #image-drop.has-image #image-hint {
+        display: none;
+    }
+    #submit-btn {
+        margin-top: 1rem;
+        padding: 0.75em 2em;
+        font-size: 1.1rem;
+        font-weight: 600;
+        background-color: var(--primary-accent-color);
+        color: var(--bright-color);
+        border: none;
+        border-radius: 0.4rem;
+        cursor: pointer;
+    }
+    #submit-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+</style>
+
+<script>
+const form = document.getElementById('recipe-form');
+const fileInput = document.getElementById('recipe-image');
+const dropZone = document.getElementById('image-drop');
+const preview = document.getElementById('image-preview');
+const textarea = document.getElementById('recipe-content');
+const mdWarning = document.getElementById('md-image-warning');
+const stripBtn = document.getElementById('strip-images-btn');
+const mdImageRe = /!\[[^\]]*\]\([^)]+\)/g;
+
+function showPreview(file) {
+    const url = URL.createObjectURL(file);
+    preview.src = url;
+    dropZone.classList.add('has-image');
+}
+
+function checkMarkdownImages() {
+    mdWarning.style.display = mdImageRe.test(textarea.value) ? '' : 'none';
+}
+
+stripBtn.addEventListener('click', () => {
+    textarea.value = textarea.value.replace(mdImageRe, '').replace(/\n{3,}/g, '\n\n').trim();
+    checkMarkdownImages();
+});
+
+textarea.addEventListener('input', checkMarkdownImages);
+textarea.addEventListener('paste', () => setTimeout(checkMarkdownImages, 0));
+checkMarkdownImages();
+
+fileInput.addEventListener('change', () => {
+    if (fileInput.files[0]) showPreview(fileInput.files[0]);
+});
+
+// Paste image from clipboard (desktop workflow)
+document.addEventListener('paste', (e) => {
+    for (const item of e.clipboardData.items) {
+        if (item.type.startsWith('image/')) {
+            e.preventDefault();
+            const file = item.getAsFile();
+            const dt = new DataTransfer();
+            dt.items.add(file);
+            fileInput.files = dt.files;
+            showPreview(file);
+            break;
+        }
+    }
+});
+
+// Validate all fields before submit
+form.addEventListener('submit', (e) => {
+    {% if not recipe %}
+    if (!fileInput.files.length) {
+        e.preventDefault();
+        alert('Please add a photo.');
+    }
+    {% endif %}
+});
+</script>
+{% endblock %}
