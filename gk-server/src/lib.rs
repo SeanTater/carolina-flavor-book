@@ -10,7 +10,7 @@ use axum::{
     extract::{FromRef, Multipart, Path, State},
     http::{header, StatusCode},
     response::{Html, IntoResponse, Redirect},
-    routing::{get, post},
+    routing::{get, patch, post},
     Form, Json, Router,
 };
 use base64::Engine;
@@ -70,6 +70,7 @@ pub fn build_app(state: AppState) -> Router {
         .route("/api/auth/check", get(auth_check))
         .route("/recipe/{recipe_id}", get(get_recipe))
         .route("/search", get(search_recipes))
+        .route("/api/search", get(api_search_recipes))
         .route(
             "/api/get-task/generate-image/{category}",
             get(get_generate_image_task),
@@ -83,9 +84,11 @@ pub fn build_app(state: AppState) -> Router {
             .post(update_recipe)
             .layer(axum::extract::DefaultBodyLimit::max(20 * 1024 * 1024)))
         .route("/api/recipe", post(upload_recipe))
+        .route("/api/recipe/{recipe_id}", patch(patch_recipe))
         .route("/api/tags/{recipe_id}", post(add_tags))
         .route("/api/tags", get(get_all_tags))
         .route("/api/recipes/basic", get(get_all_basics_api))
+        .route("/api/recipes/missing-images", get(get_recipes_missing_images))
         .route("/api/recipes/text", get(get_all_recipes_text))
         .route("/api/schedule", post(upsert_schedule))
         .route("/static/{*path}", get(serve_static))
@@ -201,6 +204,18 @@ async fn search_recipes(
             page => search_query.page,
         },
     )?))
+}
+
+async fn api_search_recipes(
+    State(doc_index): State<DocumentIndexHandle>,
+    axum::extract::Query(search_query): axum::extract::Query<SearchQuery>,
+) -> WebResult<Json<Vec<serde_json::Value>>> {
+    let results = doc_index.search(&search_query.query, search_query.page * 20, 20)?;
+    Ok(Json(results.iter().map(|r| serde_json::json!({
+        "recipe_id": r.recipe.recipe_id,
+        "name": r.recipe.name,
+        "relevance": r.relevance_percent,
+    })).collect()))
 }
 
 async fn get_image(
@@ -449,6 +464,65 @@ async fn add_tags(
     Ok(StatusCode::OK)
 }
 
+#[derive(Deserialize)]
+struct RecipePatch {
+    name: Option<String>,
+    content: Option<String>,
+    tags: Option<TagPatch>,
+}
+
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum TagPatch {
+    Set(Vec<String>),
+    Ops(TagOps),
+}
+
+#[derive(Deserialize)]
+struct TagOps {
+    #[serde(default)]
+    add: Vec<String>,
+    #[serde(default)]
+    remove: Vec<String>,
+}
+
+async fn patch_recipe(
+    State(db): State<database::Database>,
+    Path(recipe_id): Path<i64>,
+    _: AuthenticatedUser,
+    Json(patch): Json<RecipePatch>,
+) -> WebResult<StatusCode> {
+    if let Some(name) = &patch.name {
+        Recipe::update_name(&db, recipe_id, name)?;
+    }
+    if let Some(content) = &patch.content {
+        Revision::push(
+            &db,
+            basic_models::RevisionForUpload {
+                source_name: "manual".into(),
+                content_text: content.clone(),
+                format: "markdown".into(),
+                details: None,
+            },
+            recipe_id,
+        )?;
+    }
+    if let Some(tags) = &patch.tags {
+        match tags {
+            TagPatch::Set(tags) => {
+                models::Tag::set_for_recipe(&db, recipe_id, tags)?;
+            }
+            TagPatch::Ops(ops) => {
+                for tag in &ops.add {
+                    models::Tag::push(&db, recipe_id, tag)?;
+                }
+                models::Tag::remove(&db, recipe_id, &ops.remove)?;
+            }
+        }
+    }
+    Ok(StatusCode::OK)
+}
+
 async fn get_all_tags(
     State(db): State<database::Database>,
 ) -> WebResult<Json<Vec<models::Tag>>> {
@@ -459,6 +533,38 @@ async fn get_all_basics_api(
     State(db): State<database::Database>,
 ) -> WebResult<Json<Vec<Recipe>>> {
     Ok(Json(Recipe::get_all_basics(&db)?))
+}
+
+#[derive(serde::Deserialize)]
+struct MissingImagesQuery {
+    #[serde(default)]
+    max_images: Option<i64>,
+}
+
+async fn get_recipes_missing_images(
+    State(db): State<database::Database>,
+    axum::extract::Query(query): axum::extract::Query<MissingImagesQuery>,
+) -> WebResult<Json<Vec<serde_json::Value>>> {
+    let threshold = query.max_images.unwrap_or(0);
+    let conn = db.pool.get().map_err(|e| anyhow::anyhow!("{e}"))?;
+    let mut stmt = conn.prepare(
+        "SELECT Recipe.recipe_id, Recipe.name, COUNT(Image.image_id) AS image_count
+         FROM Recipe
+         LEFT JOIN Image ON Recipe.recipe_id = Image.recipe_id
+         GROUP BY Recipe.recipe_id
+         HAVING image_count <= ?
+         ORDER BY image_count ASC, Recipe.recipe_id ASC",
+    ).map_err(|e| anyhow::anyhow!("{e}"))?;
+    let rows = stmt.query_map(rusqlite::params![threshold], |row| {
+        Ok(serde_json::json!({
+            "recipe_id": row.get::<_, i64>(0)?,
+            "name": row.get::<_, String>(1)?,
+            "image_count": row.get::<_, i64>(2)?,
+        }))
+    }).map_err(|e| anyhow::anyhow!("{e}"))?
+    .collect::<Result<Vec<_>, _>>()
+    .map_err(|e| anyhow::anyhow!("{e}"))?;
+    Ok(Json(rows))
 }
 
 async fn get_all_recipes_text(

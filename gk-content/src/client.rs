@@ -23,6 +23,20 @@ pub struct TagEntry {
     pub tag: String,
 }
 
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct MissingImageRecipe {
+    pub recipe_id: i64,
+    pub name: String,
+    pub image_count: i64,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct SearchResult {
+    pub recipe_id: i64,
+    pub name: String,
+    pub relevance: i32,
+}
+
 impl ContentClient {
     pub fn new(server: &str, token: &str) -> Self {
         Self {
@@ -99,6 +113,16 @@ impl ContentClient {
         Ok(())
     }
 
+    /// Get recipes with missing images.
+    pub async fn get_missing_images(&self, max_images: i64) -> Result<Vec<MissingImageRecipe>> {
+        let resp = self.http
+            .get(format!("{}/api/recipes/missing-images?max_images={max_images}", self.server))
+            .send()
+            .await?;
+        ensure!(resp.status().is_success(), "Failed to get missing images: {}", resp.status());
+        Ok(resp.json().await?)
+    }
+
     /// Get all tags from the server.
     pub async fn get_all_tags(&self) -> Result<Vec<TagEntry>> {
         let resp = self.http
@@ -117,6 +141,34 @@ impl ContentClient {
             .await?;
         ensure!(resp.status().is_success(), "Failed to get recipes: {}", resp.status());
         Ok(resp.json().await?)
+    }
+
+    /// Semantic search for recipes.
+    pub async fn search_semantic(&self, query: &str) -> Result<Vec<SearchResult>> {
+        let resp = self.http
+            .get(format!("{}/api/search?query={}", self.server, urlencoding::encode(query)))
+            .send()
+            .await?;
+        ensure!(resp.status().is_success(), "Failed to search: {}", resp.status());
+        Ok(resp.json().await?)
+    }
+
+    /// Patch a recipe (rename, update content, modify tags).
+    /// All fields are optional — only provided fields are applied.
+    pub async fn patch_recipe(&self, recipe_id: i64, patch: &serde_json::Value) -> Result<()> {
+        let resp = self.http
+            .patch(format!("{}/api/recipe/{recipe_id}", self.server))
+            .json(patch)
+            .header("Authorization", format!("Bearer {}", self.token))
+            .send()
+            .await?;
+        ensure!(resp.status().is_success(), "Failed to patch recipe {recipe_id}: {}", resp.status());
+        Ok(())
+    }
+
+    /// Rename a recipe (convenience wrapper around patch_recipe).
+    pub async fn rename_recipe(&self, recipe_id: i64, new_name: &str) -> Result<()> {
+        self.patch_recipe(recipe_id, &serde_json::json!({"name": new_name})).await
     }
 
     /// Upsert front page schedule sections.

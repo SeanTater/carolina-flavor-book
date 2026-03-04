@@ -75,3 +75,33 @@ async fn ingest_tags_round_trip() {
     let gap_report = gaps::analyze(&all_tags, basics.len() as u64, &grid, Some("korean"), &[]);
     assert_eq!(gap_report.total_recipes, 1);
 }
+
+#[tokio::test]
+async fn patch_recipe_rename_and_tags() {
+    let server = start_test_server().await;
+    let client = ContentClient::new(&server, TEST_TOKEN);
+
+    let recipe_id = client.push_recipe("Old Name", "Some content", &["italian".into()]).await.unwrap();
+
+    // Rename
+    client.rename_recipe(recipe_id, "New Name (Italian pasta bake)").await.unwrap();
+    let basics = client.get_all_basics().await.unwrap();
+    let recipe = basics.iter().find(|r| r.recipe_id == recipe_id).unwrap();
+    assert_eq!(recipe.name, "New Name (Italian pasta bake)");
+
+    // Patch tags with set
+    client.patch_recipe(recipe_id, &serde_json::json!({"tags": ["french", "baked"]})).await.unwrap();
+    let all_tags = client.get_all_tags().await.unwrap();
+    let recipe_tags: Vec<_> = all_tags.iter().filter(|t| t.recipe_id == recipe_id).map(|t| t.tag.as_str()).collect();
+    assert!(recipe_tags.contains(&"french"));
+    assert!(recipe_tags.contains(&"baked"));
+    assert!(!recipe_tags.contains(&"italian")); // replaced
+
+    // Patch tags with add/remove ops
+    client.patch_recipe(recipe_id, &serde_json::json!({"tags": {"add": ["grilled"], "remove": ["baked"]}})).await.unwrap();
+    let all_tags = client.get_all_tags().await.unwrap();
+    let recipe_tags: Vec<_> = all_tags.iter().filter(|t| t.recipe_id == recipe_id).map(|t| t.tag.as_str()).collect();
+    assert!(recipe_tags.contains(&"french"));
+    assert!(recipe_tags.contains(&"grilled"));
+    assert!(!recipe_tags.contains(&"baked"));
+}

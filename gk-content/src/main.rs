@@ -38,6 +38,15 @@ struct AuthSection {
 
 #[derive(Subcommand)]
 enum Commands {
+    /// Search existing recipes (regex on names by default, or --semantic for embedding search)
+    Search {
+        /// Regex pattern or semantic query
+        query: String,
+
+        /// Use server-side semantic search instead of regex
+        #[arg(long)]
+        semantic: bool,
+    },
     /// Show gaps in recipe tag coverage
     Gaps {
         /// Filter to recipes with this cuisine tag
@@ -83,6 +92,26 @@ enum Commands {
         #[arg(long = "image-gen-arg")]
         image_gen_args: Vec<String>,
     },
+    /// List recipes with missing or few images
+    MissingImages {
+        /// Show recipes with at most this many images (default: 0 = no images)
+        #[arg(long, default_value = "0")]
+        max_images: i64,
+
+        /// Output as JSON instead of human-readable text
+        #[arg(long)]
+        json: bool,
+    },
+    /// Batch rename recipes from a JSON file
+    Rename {
+        /// Path to JSON file: {"recipe_id": "new name", ...}
+        file: String,
+    },
+    /// Batch patch recipes from a JSON file
+    Patch {
+        /// Path to JSON file: {"recipe_id": {name?, content?, tags?}, ...}
+        file: String,
+    },
     /// Load front page schedule from a JSON file
     IngestSchedule {
         /// Path to JSON file: [{date, section, title, blurb?, query_tags}, ...]
@@ -102,6 +131,26 @@ async fn main() -> Result<()> {
     let grid = grid::RecipeGrid::load(&cli.grid)?;
 
     match cli.command {
+        Commands::Search { query, semantic } => {
+            if semantic {
+                let results = client.search_semantic(&query).await?;
+                for r in &results {
+                    println!("{}%\t{}\t{}", r.relevance, r.recipe_id, r.name);
+                }
+                eprintln!("{} results", results.len());
+            } else {
+                let re = regex::RegexBuilder::new(&query).case_insensitive(true).build()?;
+                let basics = client.get_all_basics().await?;
+                let mut count = 0;
+                for r in &basics {
+                    if re.is_match(&r.name) {
+                        println!("{}\t{}", r.recipe_id, r.name);
+                        count += 1;
+                    }
+                }
+                eprintln!("{count} matches");
+            }
+        }
         Commands::Gaps { cuisine, ignore, json } => {
             let all_tags = client.get_all_tags().await?;
             let basics = client.get_all_basics().await?;
@@ -157,6 +206,45 @@ async fn main() -> Result<()> {
                 }
             }
             println!("Generated: {generated}, Failed: {failed}");
+        }
+        Commands::MissingImages { max_images, json } => {
+            let recipes = client.get_missing_images(max_images).await?;
+            if json {
+                println!("{}", serde_json::to_string_pretty(&recipes)?);
+            } else {
+                println!("{} recipes with <= {max_images} images:\n", recipes.len());
+                for r in &recipes {
+                    println!("  {:>20}  {} ({})", r.recipe_id, r.name, r.image_count);
+                }
+            }
+        }
+        Commands::Rename { file } => {
+            let content = std::fs::read_to_string(&file)?;
+            let renames: std::collections::BTreeMap<i64, String> = serde_json::from_str(&content)?;
+            println!("Renaming {} recipes...", renames.len());
+            let mut done = 0u64;
+            let mut failed = 0u64;
+            for (recipe_id, new_name) in &renames {
+                match client.rename_recipe(*recipe_id, new_name).await {
+                    Ok(()) => done += 1,
+                    Err(e) => {
+                        eprintln!("  ✗ {recipe_id}: {e}");
+                        failed += 1;
+                    }
+                }
+            }
+            println!("Renamed {done}, failed {failed}");
+        }
+        Commands::Patch { file } => {
+            let content = std::fs::read_to_string(&file)?;
+            let patches: std::collections::BTreeMap<i64, serde_json::Value> = serde_json::from_str(&content)?;
+            println!("Patching {} recipes...", patches.len());
+            let mut done = 0u64;
+            for (recipe_id, patch) in &patches {
+                client.patch_recipe(*recipe_id, patch).await?;
+                done += 1;
+            }
+            println!("Patched {done} recipes");
         }
         Commands::IngestSchedule { file } => {
             let content = std::fs::read_to_string(&file)?;
