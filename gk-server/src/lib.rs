@@ -76,7 +76,8 @@ pub fn build_app(state: AppState) -> Router {
             get(get_generate_image_task),
         )
         .route("/image/{image_id}", get(get_image))
-        .route("/api/image/{recipe_id}/{category}", post(upload_image))
+        .route("/api/image/{recipe_id}/{category}", post(upload_image)
+            .layer(axum::extract::DefaultBodyLimit::max(20 * 1024 * 1024)))
         .route("/recipe/new", get(create_recipe_page))
         .route("/recipe/save", post(save_recipe)
             .layer(axum::extract::DefaultBodyLimit::max(20 * 1024 * 1024)))
