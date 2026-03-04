@@ -90,12 +90,23 @@ impl Recipe {
                     FROM json_each(?)
                 ),
                 best_image AS (
-                    -- Get an AI image, usually the latest one generated
-                    SELECT max(image_id) as image_id, recipe_id
-                    FROM some_recipes
-                    LEFT JOIN Image USING (recipe_id)
-                    WHERE category LIKE 'ai%'
-                    GROUP BY recipe_id
+                    -- Pick the best thumbnail: prefer hero, then ai*, then any non-scan
+                    SELECT recipe_id, image_id FROM (
+                        SELECT recipe_id, image_id,
+                            ROW_NUMBER() OVER (
+                                PARTITION BY recipe_id
+                                ORDER BY
+                                    CASE
+                                        WHEN category = 'hero' THEN 0
+                                        WHEN category LIKE 'ai%' THEN 1
+                                        WHEN category NOT LIKE 'scan%' THEN 2
+                                        ELSE 3
+                                    END,
+                                    image_id DESC
+                            ) AS rn
+                        FROM some_recipes
+                        JOIN Image USING (recipe_id)
+                    ) WHERE rn = 1
                 )
             SELECT
                 recipe_id,
@@ -144,7 +155,14 @@ impl Recipe {
         Ok(db
             .collect_rows(
                 "SELECT *,
-                    (SELECT max(image_id) FROM Image WHERE recipe_id = Recipe.recipe_id) AS thumbnail_image_id
+                    (SELECT image_id FROM Image WHERE recipe_id = Recipe.recipe_id
+                        ORDER BY CASE
+                            WHEN category = 'hero' THEN 0
+                            WHEN category LIKE 'ai%' THEN 1
+                            WHEN category NOT LIKE 'scan%' THEN 2
+                            ELSE 3
+                        END, image_id DESC LIMIT 1
+                    ) AS thumbnail_image_id
                     FROM Recipe
                     WHERE Recipe.recipe_id = ?",
                 params![recipe_id],
@@ -209,12 +227,14 @@ impl Recipe {
                         .unwrap_or_default()
                 })
                 .cloned();
+            let hero_image_id = FullRecipe::pick_hero_image(&images);
             Ok(Some(FullRecipe {
                 recipe,
                 tags,
                 images,
                 revisions,
                 best_revision,
+                hero_image_id,
             }))
         } else {
             Ok(None)
@@ -287,6 +307,31 @@ impl Tag {
     /// Get all tags (every recipe_id + tag pair).
     pub fn get_all(db: &Database) -> Result<Vec<Tag>> {
         db.collect_rows("SELECT recipe_id, tag FROM Tag", params![])
+    }
+
+    /// Replace all tags for a recipe with a new set.
+    pub fn set_for_recipe(db: &Database, recipe_id: i64, tags: &[String]) -> Result<()> {
+        let conn = db.pool.get()?;
+        conn.execute("DELETE FROM Tag WHERE recipe_id = ?", params![recipe_id])?;
+        for tag in tags {
+            conn.execute(
+                "INSERT INTO Tag (recipe_id, tag) VALUES (?, ?)",
+                params![recipe_id, tag],
+            )?;
+        }
+        Ok(())
+    }
+
+    /// Remove specific tags from a recipe.
+    pub fn remove(db: &Database, recipe_id: i64, tags: &[String]) -> Result<()> {
+        let conn = db.pool.get()?;
+        for tag in tags {
+            conn.execute(
+                "DELETE FROM Tag WHERE recipe_id = ? AND tag = ?",
+                params![recipe_id, tag],
+            )?;
+        }
+        Ok(())
     }
 }
 
@@ -482,6 +527,22 @@ pub struct FullRecipe {
     pub images: Vec<Image>,
     pub revisions: Vec<Revision>,
     pub best_revision: Option<Revision>,
+    /// Best image to use as a hero banner: prefers AI-generated, then any non-scan.
+    pub hero_image_id: Option<i64>,
+}
+
+impl FullRecipe {
+    fn pick_hero_image(images: &[Image]) -> Option<i64> {
+        // Prefer AI-generated images
+        if let Some(img) = images.iter().find(|i| i.category.starts_with("ai")) {
+            return Some(img.image_id);
+        }
+        // Fall back to any non-scan image
+        if let Some(img) = images.iter().find(|i| !i.category.starts_with("scan")) {
+            return Some(img.image_id);
+        }
+        None
+    }
 }
 
 /// Convert a slice of bytes into a vector of f16

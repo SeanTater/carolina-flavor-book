@@ -1,6 +1,11 @@
 {% extends "base.html.jinja" %}
 
 {% block content %}
+{% if recipe.hero_image_id %}
+<recipe-hero>
+    <img src="/image/{{ recipe.hero_image_id }}" alt="">
+</recipe-hero>
+{% endif %}
 <div style="display: flex; justify-content: space-between; align-items: center;">
     <div></div>
     <a href="/recipe/{{ recipe.recipe.recipe_id }}/edit" style="font-size: 0.9rem;">Edit</a>

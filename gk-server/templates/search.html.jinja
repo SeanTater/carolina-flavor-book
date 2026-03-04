@@ -11,8 +11,10 @@ Search results for "{{query}}"
     <a href="/recipe/{{search_result.recipe.recipe_id}}">
         <image-card>
             <h4>{{search_result.recipe.name}}</h4>
+            {% if search_result.recipe.thumbnail_image_id %}
             <img src="/image/{{search_result.recipe.thumbnail_image_id}}"
                 alt="{{search_result.recipe.name}}" loading="lazy">
+            {% endif %}
 
             <search-relevance style="--relevance: {{search_result.relevance}}%;"
                 title="{{search_result.relevance_percent}}% similar"></search-relevance>

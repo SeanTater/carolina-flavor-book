@@ -11,8 +11,10 @@
         <a href="/recipe/{{recipe.recipe_id}}">
             <image-card>
                 <h4>{{recipe.name}}</h4>
+                {% if recipe.thumbnail_image_id %}
                 <img src="/image/{{recipe.thumbnail_image_id}}"
                     alt="{{recipe.name}}" loading="lazy">
+                {% endif %}
             </image-card>
         </a>
         {% endfor %}
