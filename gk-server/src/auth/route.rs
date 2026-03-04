@@ -30,6 +30,8 @@ pub async fn login_submit(
             auth.sessions.sessions.insert(session.id, session.clone());
             let cookie = Cookie::build(("session_id", hex::encode(session.id.to_be_bytes())))
                 .http_only(true)
+                .secure(true)
+                .same_site(axum_extra::extract::cookie::SameSite::Strict)
                 .path("/");
             jar = jar.add(cookie);
             Ok((jar, Redirect::to("/")))
