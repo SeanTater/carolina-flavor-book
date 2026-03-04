@@ -53,6 +53,7 @@ tracing-subscriber = { features = ["json", "env-filter", "tracing-log"], workspa
 url-escape = { workspace = true }
 
 webp = { workspace = true }
+ammonia = "4.1.2"
 
 [dev-dependencies]
 bcrypt = "0.17"

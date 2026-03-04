@@ -459,7 +459,7 @@ impl FromRow for Revision {
             // Normally I would use pulldown_cmark but it doesn't protect against XSS
             // So instead we're using markdown-rs, which is less featureful but safer
             // But only the post-1.0 version
-            rendered: Some(markdown::to_html(&content_text)),
+            rendered: Some(ammonia::clean(&markdown::to_html(&content_text))),
             content_text,
             details: row.get("details")?,
             format: row.get("format")?,
@@ -698,6 +698,55 @@ pub enum ClaimType {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn make_image(id: i64, category: &str) -> Image {
+        Image {
+            image_id: id,
+            recipe_id: 1,
+            category: category.into(),
+            format: "webp".into(),
+            prompt: None,
+        }
+    }
+
+    #[test]
+    fn pick_hero_image_empty() {
+        assert_eq!(FullRecipe::pick_hero_image(&[]), None);
+    }
+
+    #[test]
+    fn pick_hero_image_ai_preferred() {
+        let images = vec![
+            make_image(1, "scan-front"),
+            make_image(2, "ai-photo"),
+            make_image(3, "user-upload"),
+        ];
+        assert_eq!(FullRecipe::pick_hero_image(&images), Some(2));
+    }
+
+    #[test]
+    fn pick_hero_image_scan_only_returns_none() {
+        let images = vec![make_image(1, "scan-front"), make_image(2, "scan-back")];
+        assert_eq!(FullRecipe::pick_hero_image(&images), None);
+    }
+
+    #[test]
+    fn pick_hero_image_non_scan_fallback() {
+        let images = vec![
+            make_image(1, "scan-front"),
+            make_image(2, "user-upload"),
+        ];
+        assert_eq!(FullRecipe::pick_hero_image(&images), Some(2));
+    }
+
+    #[test]
+    fn pick_hero_image_ai_wins_over_non_scan() {
+        let images = vec![
+            make_image(1, "user-upload"),
+            make_image(2, "ai-illustration"),
+        ];
+        assert_eq!(FullRecipe::pick_hero_image(&images), Some(2));
+    }
 
     #[test]
     fn bytes_to_f16_roundtrip() {
