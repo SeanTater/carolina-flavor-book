@@ -7,7 +7,7 @@ use axum::{
 };
 use gk_server::{
     build_app, AppState,
-    models::Recipe,
+    models::{FrontPageSection, Recipe},
     search::DocumentIndexHandle,
 };
 use tower::ServiceExt;
@@ -361,3 +361,163 @@ async fn update_recipe_without_image_keeps_existing() {
     let full = Recipe::get_full_recipe(&db, id).unwrap().unwrap();
     assert!(!full.images.is_empty(), "existing image should be preserved");
 }
+
+#[tokio::test]
+async fn get_all_tags_api() {
+    let state = test_app_state().await;
+    Recipe::push(&state.db, common::sample_recipe_upload()).await.unwrap();
+    let app = build_app(state);
+    let resp = app
+        .oneshot(Request::builder().uri("/api/tags").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+    let tags: Vec<serde_json::Value> = serde_json::from_slice(&body).unwrap();
+    assert!(tags.len() >= 2);
+}
+
+#[tokio::test]
+async fn patch_recipe_name() {
+    let state = test_app_state().await;
+    let id = Recipe::push(&state.db, common::sample_recipe_upload()).await.unwrap();
+    let db = state.db.clone();
+    let app = build_app(state);
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .method("PATCH")
+                .uri(&format!("/api/recipe/{}", id))
+                .header("Authorization", "Bearer test-secret-token")
+                .header("Content-Type", "application/json")
+                .body(Body::from(format!(r#"{{"name":"Patched Name"}}"#)))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let recipe = Recipe::get_by_id(&db, id).unwrap().unwrap();
+    assert_eq!(recipe.name, "Patched Name");
+}
+
+#[tokio::test]
+async fn patch_recipe_content() {
+    let state = test_app_state().await;
+    let id = Recipe::push(&state.db, common::sample_recipe_upload()).await.unwrap();
+    let db = state.db.clone();
+    let app = build_app(state);
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .method("PATCH")
+                .uri(&format!("/api/recipe/{}", id))
+                .header("Authorization", "Bearer test-secret-token")
+                .header("Content-Type", "application/json")
+                .body(Body::from(r#"{"content":"New content here"}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let full = Recipe::get_full_recipe(&db, id).unwrap().unwrap();
+    assert_eq!(full.revisions.len(), 2);
+}
+
+#[tokio::test]
+async fn patch_recipe_tags_set() {
+    let state = test_app_state().await;
+    let id = Recipe::push(&state.db, common::sample_recipe_upload()).await.unwrap();
+    let db = state.db.clone();
+    let app = build_app(state);
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .method("PATCH")
+                .uri(&format!("/api/recipe/{}", id))
+                .header("Authorization", "Bearer test-secret-token")
+                .header("Content-Type", "application/json")
+                .body(Body::from(r#"{"tags":["vegan","quick"]}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let full = Recipe::get_full_recipe(&db, id).unwrap().unwrap();
+    let names: Vec<&str> = full.tags.iter().map(|t| t.tag.as_str()).collect();
+    assert!(names.contains(&"vegan"));
+    assert!(!names.contains(&"dessert"));
+}
+
+#[tokio::test]
+async fn get_all_basics_api() {
+    let state = test_app_state().await;
+    Recipe::push(&state.db, common::sample_recipe_upload()).await.unwrap();
+    let app = build_app(state);
+    let resp = app
+        .oneshot(Request::builder().uri("/api/recipes/basic").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+    let recipes: Vec<serde_json::Value> = serde_json::from_slice(&body).unwrap();
+    assert_eq!(recipes.len(), 1);
+}
+
+#[tokio::test]
+async fn get_recipes_missing_images_api() {
+    let state = test_app_state().await;
+    Recipe::push(&state.db, common::sample_recipe_upload()).await.unwrap();
+    let app = build_app(state);
+    let resp = app
+        .oneshot(Request::builder().uri("/api/recipes/missing-images").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+    let recipes: Vec<serde_json::Value> = serde_json::from_slice(&body).unwrap();
+    assert_eq!(recipes.len(), 1); // sample has 0 images
+}
+
+#[tokio::test]
+async fn get_all_recipes_text_api() {
+    let state = test_app_state().await;
+    Recipe::push(&state.db, common::sample_recipe_upload()).await.unwrap();
+    let app = build_app(state);
+    let resp = app
+        .oneshot(Request::builder().uri("/api/recipes/text").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+    let recipes: Vec<serde_json::Value> = serde_json::from_slice(&body).unwrap();
+    assert_eq!(recipes.len(), 1);
+}
+
+#[tokio::test]
+async fn upsert_schedule_api() {
+    let state = test_app_state().await;
+    let app = build_app(state);
+    let body = serde_json::to_string(&vec![FrontPageSection {
+        date: "03-15".into(),
+        section: "featured".into(),
+        title: "Test".into(),
+        blurb: None,
+        query_tags: "dessert".into(),
+    }]).unwrap();
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/schedule")
+                .header("Authorization", "Bearer test-secret-token")
+                .header("Content-Type", "application/json")
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+}
+
+// browse_by_tag requires a live embedding model (search_tags panics on empty index),
+// so it's skipped — same category as search/mod.rs.

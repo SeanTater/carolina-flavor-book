@@ -92,6 +92,76 @@ pub fn analyze(
     GapReport { total_recipes: effective_total, axes }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::grid::{Axis, RecipeGrid};
+
+    fn make_grid(axes: Vec<(&str, &str, Vec<&str>)>) -> RecipeGrid {
+        let mut map = BTreeMap::new();
+        for (name, display, tags) in axes {
+            map.insert(name.to_string(), Axis {
+                display: display.to_string(),
+                tags: tags.into_iter().map(|s| s.to_string()).collect(),
+            });
+        }
+        RecipeGrid { axes: map }
+    }
+
+    #[test]
+    fn analyze_empty_input() {
+        let grid = make_grid(vec![("cuisine", "Cuisine", vec!["italian", "mexican"])]);
+        let report = analyze(&[], 0, &grid, None, &[]);
+        assert_eq!(report.total_recipes, 0);
+        assert_eq!(report.axes["cuisine"].tags.len(), 2);
+        assert!(report.axes["cuisine"].tags.iter().all(|t| t.count == 0));
+    }
+
+    #[test]
+    fn analyze_single_axis() {
+        let grid = make_grid(vec![("cuisine", "Cuisine", vec!["italian", "mexican"])]);
+        let tags = vec![
+            TagEntry { recipe_id: 1, tag: "italian".into() },
+            TagEntry { recipe_id: 2, tag: "italian".into() },
+            TagEntry { recipe_id: 3, tag: "mexican".into() },
+        ];
+        let report = analyze(&tags, 3, &grid, None, &[]);
+        assert_eq!(report.total_recipes, 3);
+        let cuisine = &report.axes["cuisine"];
+        // Sorted by count desc, so italian (2) first
+        assert_eq!(cuisine.tags[0].tag, "italian");
+        assert_eq!(cuisine.tags[0].count, 2);
+        assert_eq!(cuisine.tags[1].count, 1);
+    }
+
+    #[test]
+    fn analyze_cuisine_filter() {
+        let grid = make_grid(vec![("meal", "Meal Type", vec!["dinner", "lunch"])]);
+        let tags = vec![
+            TagEntry { recipe_id: 1, tag: "italian".into() },
+            TagEntry { recipe_id: 1, tag: "dinner".into() },
+            TagEntry { recipe_id: 2, tag: "mexican".into() },
+            TagEntry { recipe_id: 2, tag: "lunch".into() },
+        ];
+        let report = analyze(&tags, 2, &grid, Some("italian"), &[]);
+        assert_eq!(report.total_recipes, 1); // only recipe 1 is italian
+        let meal = &report.axes["meal"];
+        assert_eq!(meal.tags.iter().find(|t| t.tag == "dinner").unwrap().count, 1);
+        assert_eq!(meal.tags.iter().find(|t| t.tag == "lunch").unwrap().count, 0);
+    }
+
+    #[test]
+    fn analyze_ignore_list() {
+        let grid = make_grid(vec![
+            ("cuisine", "Cuisine", vec!["italian"]),
+            ("meal", "Meal", vec!["dinner"]),
+        ]);
+        let report = analyze(&[], 0, &grid, None, &["meal".to_string()]);
+        assert!(report.axes.contains_key("cuisine"));
+        assert!(!report.axes.contains_key("meal"));
+    }
+}
+
 /// Format the gap report as a human-readable string.
 pub fn format_text(report: &GapReport) -> String {
     let mut out = String::new();

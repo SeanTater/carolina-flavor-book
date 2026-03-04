@@ -1,7 +1,7 @@
 #[allow(dead_code)]
 mod common;
 
-use gk_server::models::{Embedding, Recipe, Revision, Tag};
+use gk_server::models::{Embedding, FrontPageSection, Recipe, Revision, Tag};
 use half::f16;
 
 #[tokio::test]
@@ -129,4 +129,92 @@ async fn recipe_without_enough_images() {
     // Our sample recipe has 0 images, so it should be found
     let result = Recipe::get_any_recipe_without_enough_images(&db, "ai-photo").unwrap();
     assert!(result.is_some());
+}
+
+#[tokio::test]
+async fn tag_set_for_recipe() {
+    let db = common::test_db().await;
+    let id = Recipe::push(&db, common::sample_recipe_upload()).await.unwrap();
+    // Replace tags
+    Tag::set_for_recipe(&db, id, &["vegan".into(), "quick".into()]).unwrap();
+    let recipe = Recipe::get_full_recipe(&db, id).unwrap().unwrap();
+    let tag_names: Vec<&str> = recipe.tags.iter().map(|t| t.tag.as_str()).collect();
+    assert!(tag_names.contains(&"vegan"));
+    assert!(tag_names.contains(&"quick"));
+    assert!(!tag_names.contains(&"dessert")); // original tag gone
+}
+
+#[tokio::test]
+async fn tag_remove() {
+    let db = common::test_db().await;
+    let id = Recipe::push(&db, common::sample_recipe_upload()).await.unwrap();
+    Tag::remove(&db, id, &["dessert".into()]).unwrap();
+    let recipe = Recipe::get_full_recipe(&db, id).unwrap().unwrap();
+    let tag_names: Vec<&str> = recipe.tags.iter().map(|t| t.tag.as_str()).collect();
+    assert!(!tag_names.contains(&"dessert"));
+    assert!(tag_names.contains(&"chocolate")); // other tag remains
+}
+
+#[tokio::test]
+async fn front_page_section_upsert_and_get() {
+    let db = common::test_db().await;
+    let section = FrontPageSection {
+        date: "03-15".into(),
+        section: "featured".into(),
+        title: "Spring Favorites".into(),
+        blurb: Some("Fresh seasonal picks".into()),
+        query_tags: "spring,salad".into(),
+    };
+    FrontPageSection::upsert(&db, &section).unwrap();
+
+    let sections = FrontPageSection::get_for_date(&db, "03-15").unwrap();
+    assert_eq!(sections.len(), 1);
+    assert_eq!(sections[0].title, "Spring Favorites");
+
+    // Upsert replaces
+    let updated = FrontPageSection {
+        title: "Updated Title".into(),
+        ..section
+    };
+    FrontPageSection::upsert(&db, &updated).unwrap();
+    let sections = FrontPageSection::get_for_date(&db, "03-15").unwrap();
+    assert_eq!(sections.len(), 1);
+    assert_eq!(sections[0].title, "Updated Title");
+}
+
+#[tokio::test]
+async fn front_page_get_for_date_empty() {
+    let db = common::test_db().await;
+    let sections = FrontPageSection::get_for_date(&db, "12-25").unwrap();
+    assert!(sections.is_empty());
+}
+
+#[tokio::test]
+async fn front_page_get_recipe_ids_for_tags() {
+    let db = common::test_db().await;
+    Recipe::push(&db, common::sample_recipe_upload()).await.unwrap();
+    let ids = FrontPageSection::get_recipe_ids_for_tags(&db, &["dessert".into()], 10).unwrap();
+    assert_eq!(ids.len(), 1);
+
+    // Empty tags returns empty
+    let ids = FrontPageSection::get_recipe_ids_for_tags(&db, &[], 10).unwrap();
+    assert!(ids.is_empty());
+}
+
+#[tokio::test]
+async fn recipe_update_name() {
+    let db = common::test_db().await;
+    let id = Recipe::push(&db, common::sample_recipe_upload()).await.unwrap();
+    Recipe::update_name(&db, id, "Renamed Cake").unwrap();
+    let recipe = Recipe::get_by_id(&db, id).unwrap().unwrap();
+    assert_eq!(recipe.name, "Renamed Cake");
+}
+
+#[tokio::test]
+async fn recipe_get_all_with_text() {
+    let db = common::test_db().await;
+    Recipe::push(&db, common::sample_recipe_upload()).await.unwrap();
+    let results = Recipe::get_all_with_text(&db).unwrap();
+    assert_eq!(results.len(), 1);
+    assert!(results[0].content_text.contains("Mix flour"));
 }

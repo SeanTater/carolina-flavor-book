@@ -17,6 +17,15 @@ test:
     cargo test --workspace
     cargo test --workspace --doc
 
+# Generate HTML coverage report
+coverage:
+    cargo llvm-cov --workspace --html
+    @echo "Report at target/llvm-cov/html/index.html"
+
+# Print coverage summary to terminal
+coverage-summary:
+    cargo llvm-cov --workspace
+
 # Check prod server status
 status:
     sudo systemctl status gk-server
