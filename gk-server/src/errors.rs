@@ -19,15 +19,14 @@ pub enum WebError {
 
 impl IntoResponse for WebError {
     fn into_response(self) -> Response {
-        // In development, we want to return the error message
-        // In production, we want to return a generic error message
-        let display = self.to_string();
         match self {
-            WebError::Internal(_) => {
-                (http::StatusCode::INTERNAL_SERVER_ERROR, display).into_response()
+            WebError::Internal(ref e) => {
+                tracing::error!("Internal error: {e:#}");
+                (http::StatusCode::INTERNAL_SERVER_ERROR, "Internal Server Error").into_response()
             }
-            WebError::Template(_) => {
-                (http::StatusCode::INTERNAL_SERVER_ERROR, display).into_response()
+            WebError::Template(ref e) => {
+                tracing::error!("Template error: {e:#}");
+                (http::StatusCode::INTERNAL_SERVER_ERROR, "Internal Server Error").into_response()
             }
             // Auth failures are always explained
             WebError::Auth(_) => (http::StatusCode::UNAUTHORIZED, self.to_string()).into_response(),
