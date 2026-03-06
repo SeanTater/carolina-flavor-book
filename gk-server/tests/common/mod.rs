@@ -28,6 +28,7 @@ pub async fn test_auth() -> AuthService {
 pub fn sample_recipe_upload() -> RecipeForUpload {
     RecipeForUpload {
         name: "Test Chocolate Cake".into(),
+        description: None,
         tags: vec!["dessert".into(), "chocolate".into()],
         revisions: vec![RevisionForUpload {
             source_name: "manual".into(),

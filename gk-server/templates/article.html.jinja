@@ -1,0 +1,43 @@
+{% extends "base.html.jinja" %}
+{% block title %}{{ article.title }}{% endblock %}
+{% block content %}
+<article-page>
+    <h1>{{ article.title }}</h1>
+    {% if author %}
+    <p class="article-byline">By {{ author.display_name }} · {{ article.publish_date }}</p>
+    {% endif %}
+
+    {% if article.thumbnail_image_id %}
+    <recipe-hero>
+        <img src="/image/{{ article.thumbnail_image_id }}" alt="{{ article.title }}">
+    </recipe-hero>
+    {% endif %}
+
+    <div class="article-body">
+        {{ article.rendered|safe }}
+    </div>
+
+    {% if linked_recipes %}
+    <h2>Recipes in this article</h2>
+    <image-cards>
+        {% for recipe in linked_recipes %}
+        <a href="/recipe/{{ recipe.recipe_id }}">
+            <image-card>
+                <h4>{{ recipe.name }}</h4>
+                {% if recipe.thumbnail_image_id %}
+                <img src="/image/{{ recipe.thumbnail_image_id }}" alt="{{ recipe.name }}" loading="lazy">
+                {% endif %}
+            </image-card>
+        </a>
+        {% endfor %}
+    </image-cards>
+    {% endif %}
+
+    {% if author %}
+    <aside class="author-bio">
+        <h3>About {{ author.display_name }}</h3>
+        {{ author.bio_rendered|safe }}
+    </aside>
+    {% endif %}
+</article-page>
+{% endblock %}

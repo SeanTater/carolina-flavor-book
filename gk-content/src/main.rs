@@ -112,6 +112,16 @@ enum Commands {
         /// Path to JSON file: {"recipe_id": {name?, content?, tags?}, ...}
         file: String,
     },
+    /// Create or update an author from a JSON file
+    UpsertAuthor {
+        /// Path to JSON file: {author_id, display_name, bio}
+        file: String,
+    },
+    /// Publish an article from a JSON file
+    PublishArticle {
+        /// Path to JSON file: {author_id, title, slug, summary?, content_text, publish_date, recipe_ids?}
+        file: String,
+    },
     /// Load front page schedule from a JSON file
     IngestSchedule {
         /// Path to JSON file: [{date, section, title, blurb?, query_tags}, ...]
@@ -245,6 +255,18 @@ async fn main() -> Result<()> {
                 done += 1;
             }
             println!("Patched {done} recipes");
+        }
+        Commands::UpsertAuthor { file } => {
+            let content = std::fs::read_to_string(&file)?;
+            let author: serde_json::Value = serde_json::from_str(&content)?;
+            client.upsert_author(&author).await?;
+            println!("Upserted author: {}", author["author_id"]);
+        }
+        Commands::PublishArticle { file } => {
+            let content = std::fs::read_to_string(&file)?;
+            let article: serde_json::Value = serde_json::from_str(&content)?;
+            let id = client.publish_article(&article).await?;
+            println!("Published article {}: {}", id, article["title"]);
         }
         Commands::IngestSchedule { file } => {
             let content = std::fs::read_to_string(&file)?;

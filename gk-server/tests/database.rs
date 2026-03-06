@@ -218,3 +218,23 @@ async fn recipe_get_all_with_text() {
     assert_eq!(results.len(), 1);
     assert!(results[0].content_text.contains("Mix flour"));
 }
+
+#[tokio::test]
+async fn recipe_description_round_trip() {
+    let db = common::test_db().await;
+    let mut upload = common::sample_recipe_upload();
+    upload.description = Some("A rich, moist chocolate cake".into());
+    let id = Recipe::push(&db, upload).await.unwrap();
+    let recipe = Recipe::get_by_id(&db, id).unwrap().unwrap();
+    assert_eq!(recipe.description.as_deref(), Some("A rich, moist chocolate cake"));
+}
+
+#[tokio::test]
+async fn recipe_update_description() {
+    let db = common::test_db().await;
+    let id = Recipe::push(&db, common::sample_recipe_upload()).await.unwrap();
+    assert!(Recipe::get_by_id(&db, id).unwrap().unwrap().description.is_none());
+    Recipe::update_description(&db, id, Some("Now with description")).unwrap();
+    let recipe = Recipe::get_by_id(&db, id).unwrap().unwrap();
+    assert_eq!(recipe.description.as_deref(), Some("Now with description"));
+}

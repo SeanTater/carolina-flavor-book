@@ -183,6 +183,7 @@ async fn main() -> Result<()> {
 
     let recipe_upload = basic_models::RecipeForUpload {
         name: args.name,
+        description: None,
         revisions,
         images,
         tags,

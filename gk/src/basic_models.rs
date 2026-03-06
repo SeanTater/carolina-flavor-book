@@ -3,6 +3,8 @@ use serde::{Deserialize, Serialize};
 #[derive(Deserialize, Serialize, Clone)]
 pub struct RecipeForUpload {
     pub name: String,
+    #[serde(default)]
+    pub description: Option<String>,
     pub revisions: Vec<RevisionForUpload>,
     pub images: Vec<ImageForUpload>,
     pub tags: Vec<String>,
@@ -12,6 +14,7 @@ impl std::fmt::Debug for RecipeForUpload {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("RecipeForUpload")
             .field("name", &self.name)
+            .field("description", &self.description)
             .field("revisions", &self.revisions)
             .field("images", &self.images.len())
             .field("tags", &self.tags)

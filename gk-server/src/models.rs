@@ -16,6 +16,7 @@ pub fn sqlite_current_timestamp() -> String {
 pub struct Recipe {
     pub recipe_id: i64,
     pub name: String,
+    pub description: Option<String>,
     pub created_on: String,
     pub thumbnail_image_id: Option<i64>,
 }
@@ -33,6 +34,7 @@ impl FromRow for Recipe {
         Ok(Self {
             recipe_id: row.get("recipe_id")?,
             name: row.get("name")?,
+            description: row.get("description").ok().flatten(),
             created_on: row.get("created_on")?,
             thumbnail_image_id: row.get("thumbnail_image_id").ok(),
         })
@@ -111,6 +113,7 @@ impl Recipe {
             SELECT
                 recipe_id,
                 name,
+                description,
                 created_on,
                 image_id AS thumbnail_image_id,
                 (SELECT group_concat(tag, ', ')
@@ -245,8 +248,8 @@ impl Recipe {
     pub async fn push(db: &Database, upload: basic_models::RecipeForUpload) -> Result<i64> {
         let conn = db.pool.get()?;
         conn.execute(
-            "INSERT INTO Recipe (name, created_on) VALUES (?, ?)",
-            params![upload.name, sqlite_current_timestamp()],
+            "INSERT INTO Recipe (name, description, created_on) VALUES (?, ?, ?)",
+            params![upload.name, upload.description, sqlite_current_timestamp()],
         )?;
         let recipe_id = conn.last_insert_rowid();
         for tag in upload.tags {
@@ -267,6 +270,16 @@ impl Recipe {
         conn.execute(
             "UPDATE Recipe SET name = ? WHERE recipe_id = ?",
             params![name, recipe_id],
+        )?;
+        Ok(())
+    }
+
+    /// Update the description of a recipe.
+    pub fn update_description(db: &Database, recipe_id: i64, description: Option<&str>) -> Result<()> {
+        let conn = db.pool.get()?;
+        conn.execute(
+            "UPDATE Recipe SET description = ? WHERE recipe_id = ?",
+            params![description, recipe_id],
         )?;
         Ok(())
     }
@@ -686,6 +699,161 @@ impl FrontPageSection {
             params![section.date, section.section, section.title, section.blurb, section.query_tags],
         )?;
         Ok(())
+    }
+}
+
+/// Render markdown with an expanded HTML whitelist for editorial articles.
+/// Uses `allow_dangerous_html` so inline HTML passes through the markdown parser,
+/// then ammonia sanitizes the output.
+pub fn render_article_markdown(md: &str) -> String {
+    let raw = markdown::to_html_with_options(md, &markdown::Options {
+        compile: markdown::CompileOptions {
+            allow_dangerous_html: true,
+            ..Default::default()
+        },
+        ..Default::default()
+    }).unwrap_or_default();
+    let mut builder = ammonia::Builder::default();
+    builder
+        .add_tags(&["figure", "figcaption", "aside", "mark", "details", "summary", "div", "span"])
+        .add_generic_attributes(&["class"]);
+    builder.clean(&raw).to_string()
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct Author {
+    pub author_id: String,
+    pub display_name: String,
+    pub bio: String,
+    pub bio_rendered: String,
+}
+
+impl FromRow for Author {
+    fn from_row(row: &rusqlite::Row) -> rusqlite::Result<Self> {
+        let bio: String = row.get("bio")?;
+        let bio_rendered = render_article_markdown(&bio);
+        Ok(Self {
+            author_id: row.get("author_id")?,
+            display_name: row.get("display_name")?,
+            bio,
+            bio_rendered,
+        })
+    }
+}
+
+impl Author {
+    pub fn get_by_id(db: &Database, author_id: &str) -> Result<Option<Self>> {
+        Ok(db.collect_rows("SELECT * FROM Author WHERE author_id = ?", params![author_id])?.pop())
+    }
+
+    pub fn get_all(db: &Database) -> Result<Vec<Self>> {
+        db.collect_rows("SELECT * FROM Author", params![])
+    }
+
+    pub fn upsert(db: &Database, author: &Author) -> Result<()> {
+        let conn = db.pool.get()?;
+        conn.execute(
+            "INSERT OR REPLACE INTO Author (author_id, display_name, bio) VALUES (?, ?, ?)",
+            params![author.author_id, author.display_name, author.bio],
+        )?;
+        Ok(())
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct Article {
+    pub article_id: i64,
+    pub author_id: String,
+    pub title: String,
+    pub slug: String,
+    pub summary: Option<String>,
+    pub content_text: String,
+    pub rendered: String,
+    pub publish_date: String,
+    pub created_on: String,
+    pub thumbnail_image_id: Option<i64>,
+}
+
+impl FromRow for Article {
+    fn from_row(row: &rusqlite::Row) -> rusqlite::Result<Self> {
+        let content_text: String = row.get("content_text")?;
+        let rendered = render_article_markdown(&content_text);
+        Ok(Self {
+            article_id: row.get("article_id")?,
+            author_id: row.get("author_id")?,
+            title: row.get("title")?,
+            slug: row.get("slug")?,
+            summary: row.get("summary")?,
+            content_text,
+            rendered,
+            publish_date: row.get("publish_date")?,
+            created_on: row.get("created_on")?,
+            thumbnail_image_id: row.get("thumbnail_image_id").ok().flatten(),
+        })
+    }
+}
+
+impl Article {
+    pub fn get_by_slug(db: &Database, slug: &str) -> Result<Option<Self>> {
+        Ok(db.collect_rows(
+            "SELECT * FROM Article WHERE slug = ?",
+            params![slug],
+        )?.pop())
+    }
+
+    /// Get published articles (publish_date <= today), newest first.
+    pub fn get_published(db: &Database, limit: i64) -> Result<Vec<Self>> {
+        let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+        db.collect_rows(
+            "SELECT * FROM Article WHERE publish_date <= ? ORDER BY publish_date DESC LIMIT ?",
+            params![today, limit],
+        )
+    }
+
+    /// Get recipe IDs linked to an article, ordered by sort_order.
+    pub fn get_linked_recipe_ids(db: &Database, article_id: i64) -> Result<Vec<i64>> {
+        let conn = db.pool.get()?;
+        let mut stmt = conn.prepare(
+            "SELECT recipe_id FROM ArticleRecipeLink WHERE article_id = ? ORDER BY sort_order"
+        )?;
+        let rows = stmt.query_map(params![article_id], |row| row.get(0))?;
+        Ok(rows.filter_map(|r| r.ok()).collect())
+    }
+
+    /// Extract recipe IDs from `/recipe/{id}` links in markdown content,
+    /// preserving first-occurrence order and deduplicating.
+    pub fn extract_recipe_ids(content: &str) -> Vec<i64> {
+        let re = regex::Regex::new(r"/recipe/(\d+)").unwrap();
+        let mut seen = std::collections::HashSet::new();
+        let mut ids = Vec::new();
+        for cap in re.captures_iter(content) {
+            if let Ok(id) = cap[1].parse::<i64>() {
+                if seen.insert(id) {
+                    ids.push(id);
+                }
+            }
+        }
+        ids
+    }
+
+    /// Insert a new article, returns article_id.
+    /// Automatically populates recipe links from `/recipe/{id}` references in the content.
+    pub fn push(db: &Database, author_id: &str, title: &str, slug: &str, summary: Option<&str>, content_text: &str, publish_date: &str, thumbnail_image_id: Option<i64>) -> Result<i64> {
+        let conn = db.pool.get()?;
+        conn.execute(
+            "INSERT INTO Article (author_id, title, slug, summary, content_text, publish_date, created_on, thumbnail_image_id)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            params![author_id, title, slug, summary, content_text, publish_date, sqlite_current_timestamp(), thumbnail_image_id],
+        )?;
+        let article_id = conn.last_insert_rowid();
+        let recipe_ids = Self::extract_recipe_ids(content_text);
+        for (i, recipe_id) in recipe_ids.iter().enumerate() {
+            conn.execute(
+                "INSERT OR IGNORE INTO ArticleRecipeLink (article_id, recipe_id, sort_order) VALUES (?, ?, ?)",
+                params![article_id, recipe_id, i as i64],
+            )?;
+        }
+        Ok(article_id)
     }
 }
 

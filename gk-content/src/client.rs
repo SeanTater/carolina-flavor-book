@@ -53,6 +53,7 @@ impl ContentClient {
     pub async fn push_recipe(&self, name: &str, content: &str, tags: &[String]) -> Result<i64> {
         let upload = RecipeForUpload {
             name: name.to_string(),
+            description: None,
             tags: tags.to_vec(),
             revisions: vec![RevisionForUpload {
                 source_name: "generated".into(),
@@ -169,6 +170,31 @@ impl ContentClient {
     /// Rename a recipe (convenience wrapper around patch_recipe).
     pub async fn rename_recipe(&self, recipe_id: i64, new_name: &str) -> Result<()> {
         self.patch_recipe(recipe_id, &serde_json::json!({"name": new_name})).await
+    }
+
+    /// Upsert an author.
+    pub async fn upsert_author(&self, author: &serde_json::Value) -> Result<()> {
+        let resp = self.http
+            .post(format!("{}/api/author", self.server))
+            .json(author)
+            .header("Authorization", format!("Bearer {}", self.token))
+            .send()
+            .await?;
+        ensure!(resp.status().is_success(), "Failed to upsert author: {}", resp.status());
+        Ok(())
+    }
+
+    /// Publish an article, returns article_id.
+    pub async fn publish_article(&self, article: &serde_json::Value) -> Result<i64> {
+        let resp = self.http
+            .post(format!("{}/api/article", self.server))
+            .json(article)
+            .header("Authorization", format!("Bearer {}", self.token))
+            .send()
+            .await?;
+        ensure!(resp.status().is_success(), "Failed to publish article: {}", resp.status());
+        let body: serde_json::Value = resp.json().await?;
+        Ok(body["article_id"].as_i64().unwrap_or(0))
     }
 
     /// Upsert front page schedule sections.
