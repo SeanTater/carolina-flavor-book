@@ -88,12 +88,10 @@ impl TagAxes {
         })
     }
 
-    /// Try to load from config/recipe-grid.toml relative to CWD.
+    /// Load from the embedded recipe-grid.toml.
     pub fn load() -> Self {
-        std::fs::read_to_string("config/recipe-grid.toml")
-            .ok()
-            .and_then(|text| Self::from_toml(&text).ok())
-            .unwrap_or_default()
+        Self::from_toml(include_str!("../../config/recipe-grid.toml"))
+            .expect("embedded recipe-grid.toml should be valid")
     }
 }
 
