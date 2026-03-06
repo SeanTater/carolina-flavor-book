@@ -130,7 +130,7 @@ fn daily_highlights(db: &database::Database, axes: &TagAxes) -> Vec<Highlight> {
             &mut rng,
             format!("In Season: {}", capitalize(current_season)),
             &[current_season.to_string()],
-            3,
+            1,
         ) {
             highlights.push(h);
         }
@@ -144,7 +144,7 @@ fn daily_highlights(db: &database::Database, axes: &TagAxes) -> Vec<Highlight> {
         .cloned()
         .collect();
     if !occasion_tags.is_empty() {
-        if let Some(h) = build_highlight(db, &mut rng, "Not Just Dinner".into(), &occasion_tags, 3)
+        if let Some(h) = build_highlight(db, &mut rng, "Not Just Dinner".into(), &occasion_tags, 1)
         {
             highlights.push(h);
         }
@@ -158,7 +158,7 @@ fn daily_highlights(db: &database::Database, axes: &TagAxes) -> Vec<Highlight> {
         .cloned()
         .collect();
     if !cuisine_tags.is_empty() {
-        if let Some(h) = build_highlight(db, &mut rng, "World Kitchen".into(), &cuisine_tags, 3) {
+        if let Some(h) = build_highlight(db, &mut rng, "World Kitchen".into(), &cuisine_tags, 1) {
             highlights.push(h);
         }
     }
@@ -179,8 +179,14 @@ fn build_highlight(
         return None;
     }
     ids.shuffle(rng);
-    ids.truncate(count);
-    let recipes = Recipe::get_extended(db, &ids).unwrap_or_default();
+    // Fetch more than we need so we can filter for ones with images
+    let fetch_count = (count * 5).min(ids.len());
+    let recipes = Recipe::get_extended(db, &ids[..fetch_count]).unwrap_or_default();
+    let recipes: Vec<_> = recipes
+        .into_iter()
+        .filter(|r| r.thumbnail_image_id.is_some())
+        .take(count)
+        .collect();
     if recipes.is_empty() {
         return None;
     }
@@ -274,13 +280,26 @@ async fn root(
         });
     }
     let highlights = daily_highlights(&db, &tag_axes);
-    let articles = Article::get_published(&db, 3)?;
+    let articles = Article::get_published(&db, 2)?;
+    let mut article_data = vec![];
+    for article in &articles {
+        let linked_ids = Article::get_linked_recipe_ids(&db, article.article_id)?;
+        let first_recipe = if let Some(&rid) = linked_ids.first() {
+            Recipe::get_extended(&db, &[rid])?.into_iter().next()
+        } else {
+            None
+        };
+        article_data.push(context! {
+            article => article,
+            recipe_image_id => first_recipe.and_then(|r| r.thumbnail_image_id),
+        });
+    }
     Ok(Html(TEMPLATES.get_template("index.html.jinja")?.render(
         context! {
             recipes => Recipe::get_extended(&db, &some_random_ids)?,
             sections => section_data,
             highlights => highlights,
-            articles => articles,
+            articles => article_data,
         },
     )?))
 }

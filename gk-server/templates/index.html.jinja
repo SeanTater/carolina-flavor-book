@@ -6,7 +6,7 @@
 <section class="front-page-section">
     <h2>{{ section.title }}</h2>
     {% if section.blurb %}<p class="section-blurb">{{ section.blurb }}</p>{% endif %}
-    <image-cards>
+    <carousel-strip>
         {% for recipe in section.recipes %}
         <a href="/recipe/{{recipe.recipe_id}}">
             <image-card>
@@ -19,15 +19,17 @@
             </image-card>
         </a>
         {% endfor %}
-    </image-cards>
+    </carousel-strip>
 </section>
 {% endfor %}
 
-{% for highlight in highlights %}
-<section class="front-page-section">
-    <h2>{{ highlight.title }}</h2>
-    <image-cards>
-        {% for recipe in highlight.recipes %}
+{% if highlights %}
+<highlight-row>
+    {% for highlight in highlights %}
+    <highlight-card>
+        <h3>{{ highlight.title }}</h3>
+        {% set recipe = highlight.recipes[0] %}
+        {% if recipe %}
         <a href="/recipe/{{recipe.recipe_id}}">
             <image-card>
                 <h4>{{recipe.name}}</h4>
@@ -35,26 +37,34 @@
                 <img src="/image/{{recipe.thumbnail_image_id}}"
                     alt="{{recipe.name}}" loading="lazy">
                 {% endif %}
-                {% if recipe.description %}<p class="card-desc">{{recipe.description}}</p>{% endif %}
             </image-card>
         </a>
-        {% endfor %}
-    </image-cards>
-</section>
-{% endfor %}
+        {% endif %}
+    </highlight-card>
+    {% endfor %}
+</highlight-row>
+{% endif %}
 
 {% if articles %}
-<section class="front-page-section">
-    <h2>From Our Writers</h2>
-    {% for article in articles %}
-    <div class="article-card">
-        <h3><a href="/article/{{ article.slug }}">{{ article.title }}</a></h3>
-        <p class="article-meta">{{ article.publish_date }}</p>
-        {% if article.summary %}<p>{{ article.summary }}</p>{% endif %}
-    </div>
+<h2>From Our Writers</h2>
+<article-row>
+    {% for item in articles %}
+    <article-card {% if item.recipe_image_id %}class="has-image"{% endif %}>
+        <a href="/article/{{ item.article.slug }}">
+            <article-text>
+                <h3>{{ item.article.title }}</h3>
+                {% if item.article.summary %}<p>{{ item.article.summary }}</p>{% endif %}
+                <span class="article-meta">{{ item.article.publish_date }}</span>
+            </article-text>
+            {% if item.recipe_image_id %}
+            <article-thumb>
+                <img src="/image/{{ item.recipe_image_id }}" alt="" loading="lazy">
+            </article-thumb>
+            {% endif %}
+        </a>
+    </article-card>
     {% endfor %}
-    <p><a href="/articles">Past articles →</a></p>
-</section>
+</article-row>
 {% endif %}
 
 <h2>Discover More</h2>
