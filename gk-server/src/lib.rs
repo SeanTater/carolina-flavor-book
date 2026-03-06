@@ -14,11 +14,12 @@ use axum::{
     Form, Json, Router,
 };
 use base64::Engine;
+use chrono::Datelike;
 use errors::{WebError, WebResult};
 use gk::basic_models;
 use minijinja::context;
-use models::{FrontPageSection, FullRecipe, Image, ImageContent, Recipe, Revision};
-use rand::seq::SliceRandom;
+use models::{Article, Author, FrontPageSection, FullRecipe, Image, ImageContent, Recipe, Revision};
+use rand::{seq::SliceRandom, SeedableRng};
 use search::DocumentIndexHandle;
 use serde::Deserialize;
 
@@ -45,6 +46,8 @@ lazy_static::lazy_static! {
             ("browse-by-tag.html.jinja", include_str!("../templates/browse-by-tag.html.jinja")),
             ("create-recipe.html.jinja", include_str!("../templates/create-recipe.html.jinja")),
             ("login-required.html.jinja", include_str!("../templates/login-required.html.jinja")),
+            ("article.html.jinja", include_str!("../templates/article.html.jinja")),
+            ("articles.html.jinja", include_str!("../templates/articles.html.jinja")),
         ] {
             env.add_template(name, template)
                 .expect("Failed to register template");
@@ -54,11 +57,150 @@ lazy_static::lazy_static! {
     };
 }
 
+/// Tag axes loaded from recipe-grid.toml for daily highlight sections.
+#[derive(Clone, Default)]
+pub struct TagAxes {
+    pub cuisine: Vec<String>,
+    pub occasion: Vec<String>,
+    pub season: Vec<String>,
+}
+
+impl TagAxes {
+    /// Parse tag axes from recipe-grid.toml content.
+    pub fn from_toml(text: &str) -> anyhow::Result<Self> {
+        let val: toml::Value = toml::from_str(text)?;
+        let axes = val.get("axes").and_then(|a| a.as_table());
+        let get_tags = |name: &str| -> Vec<String> {
+            axes.and_then(|a| a.get(name))
+                .and_then(|v| v.get("tags"))
+                .and_then(|v| v.as_array())
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|v| v.as_str().map(String::from))
+                        .collect()
+                })
+                .unwrap_or_default()
+        };
+        Ok(Self {
+            cuisine: get_tags("cuisine"),
+            occasion: get_tags("occasion"),
+            season: get_tags("season"),
+        })
+    }
+
+    /// Try to load from config/recipe-grid.toml relative to CWD.
+    pub fn load() -> Self {
+        std::fs::read_to_string("config/recipe-grid.toml")
+            .ok()
+            .and_then(|text| Self::from_toml(&text).ok())
+            .unwrap_or_default()
+    }
+}
+
+/// A highlight section for the front page.
+#[derive(serde::Serialize)]
+struct Highlight {
+    title: String,
+    recipes: Vec<Recipe>,
+}
+
+/// Build deterministic daily highlight sections from tag axes.
+fn daily_highlights(db: &database::Database, axes: &TagAxes) -> Vec<Highlight> {
+    let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+
+    // Seed RNG deterministically from today's date
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    today.hash(&mut hasher);
+    let seed = hasher.finish();
+    let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
+
+    let mut highlights = Vec::new();
+
+    // 1. Season highlight
+    let current_season = match chrono::Local::now().month() {
+        3..=5 => "spring",
+        6..=8 => "summer",
+        9..=11 => "fall",
+        _ => "winter",
+    };
+    if axes.season.contains(&current_season.to_string()) {
+        if let Some(h) = build_highlight(
+            db,
+            &mut rng,
+            format!("In Season: {}", capitalize(current_season)),
+            &[current_season.to_string()],
+            3,
+        ) {
+            highlights.push(h);
+        }
+    }
+
+    // 2. Occasion highlight — everything except "dinner"
+    let occasion_tags: Vec<String> = axes
+        .occasion
+        .iter()
+        .filter(|t| *t != "dinner")
+        .cloned()
+        .collect();
+    if !occasion_tags.is_empty() {
+        if let Some(h) = build_highlight(db, &mut rng, "Not Just Dinner".into(), &occasion_tags, 3)
+        {
+            highlights.push(h);
+        }
+    }
+
+    // 3. Cuisine highlight — everything except american-*
+    let cuisine_tags: Vec<String> = axes
+        .cuisine
+        .iter()
+        .filter(|t| !t.starts_with("american"))
+        .cloned()
+        .collect();
+    if !cuisine_tags.is_empty() {
+        if let Some(h) = build_highlight(db, &mut rng, "World Kitchen".into(), &cuisine_tags, 3) {
+            highlights.push(h);
+        }
+    }
+
+    highlights
+}
+
+fn build_highlight(
+    db: &database::Database,
+    rng: &mut rand::rngs::StdRng,
+    title: String,
+    tags: &[String],
+    count: usize,
+) -> Option<Highlight> {
+    let mut ids =
+        models::FrontPageSection::get_recipe_ids_for_tags(db, tags, 200).unwrap_or_default();
+    if ids.is_empty() {
+        return None;
+    }
+    ids.shuffle(rng);
+    ids.truncate(count);
+    let recipes = Recipe::get_extended(db, &ids).unwrap_or_default();
+    if recipes.is_empty() {
+        return None;
+    }
+    Some(Highlight { title, recipes })
+}
+
+fn capitalize(s: &str) -> String {
+    let mut c = s.chars();
+    match c.next() {
+        None => String::new(),
+        Some(f) => f.to_uppercase().to_string() + c.as_str(),
+    }
+}
+
 #[derive(Clone, FromRef)]
 pub struct AppState {
     pub db: database::Database,
     pub doc_index: DocumentIndexHandle,
     pub auth: AuthService,
+    pub tag_axes: TagAxes,
 }
 
 /// Build the full application router with all routes.
@@ -91,6 +233,10 @@ pub fn build_app(state: AppState) -> Router {
         .route("/api/recipes/basic", get(get_all_basics_api))
         .route("/api/recipes/missing-images", get(get_recipes_missing_images))
         .route("/api/recipes/text", get(get_all_recipes_text))
+        .route("/article/{slug}", get(view_article))
+        .route("/articles", get(list_articles))
+        .route("/api/article", post(create_article))
+        .route("/api/author", post(upsert_author))
         .route("/api/schedule", post(upsert_schedule))
         .route("/static/{*path}", get(serve_static))
         .route("/auth/login", get(auth::route::login_page).post(auth::route::login_submit))
@@ -103,7 +249,10 @@ pub fn build_app(state: AppState) -> Router {
         .with_state(state)
 }
 
-async fn root(State(db): State<database::Database>) -> WebResult<Html<String>> {
+async fn root(
+    State(db): State<database::Database>,
+    State(tag_axes): State<TagAxes>,
+) -> WebResult<Html<String>> {
     let all_recipes = Recipe::get_all_basics(&db)?;
     let some_random_ids = all_recipes
         .choose_multiple(&mut rand::thread_rng(), 20)
@@ -124,10 +273,14 @@ async fn root(State(db): State<database::Database>) -> WebResult<Html<String>> {
             recipes => recipes,
         });
     }
+    let highlights = daily_highlights(&db, &tag_axes);
+    let articles = Article::get_published(&db, 3)?;
     Ok(Html(TEMPLATES.get_template("index.html.jinja")?.render(
         context! {
             recipes => Recipe::get_extended(&db, &some_random_ids)?,
             sections => section_data,
+            highlights => highlights,
+            articles => articles,
         },
     )?))
 }
@@ -324,6 +477,7 @@ async fn save_recipe(
 
     let upload = basic_models::RecipeForUpload {
         name: name.clone(),
+        description: None,
         tags: vec!["manual".into()],
         revisions: vec![basic_models::RevisionForUpload {
             source_name: "manual".into(),
@@ -468,6 +622,7 @@ async fn add_tags(
 #[derive(Deserialize)]
 struct RecipePatch {
     name: Option<String>,
+    description: Option<String>,
     content: Option<String>,
     tags: Option<TagPatch>,
 }
@@ -495,6 +650,9 @@ async fn patch_recipe(
 ) -> WebResult<StatusCode> {
     if let Some(name) = &patch.name {
         Recipe::update_name(&db, recipe_id, name)?;
+    }
+    if let Some(description) = &patch.description {
+        Recipe::update_description(&db, recipe_id, Some(description))?;
     }
     if let Some(content) = &patch.content {
         Revision::push(
@@ -582,6 +740,87 @@ async fn upsert_schedule(
     for section in &sections {
         FrontPageSection::upsert(&db, section)?;
     }
+    Ok(StatusCode::OK)
+}
+
+async fn view_article(
+    State(db): State<database::Database>,
+    Path(slug): Path<String>,
+) -> WebResult<Html<String>> {
+    let article = Article::get_by_slug(&db, &slug)?.ok_or(WebError::NotFound)?;
+    // Check publish date
+    let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+    if article.publish_date > today {
+        return Err(WebError::NotFound);
+    }
+    let author = Author::get_by_id(&db, &article.author_id)?;
+    let recipe_ids = Article::get_linked_recipe_ids(&db, article.article_id)?;
+    let linked_recipes = Recipe::get_extended(&db, &recipe_ids)?;
+    Ok(Html(TEMPLATES.get_template("article.html.jinja")?.render(
+        context! {
+            article => article,
+            author => author,
+            linked_recipes => linked_recipes,
+        },
+    )?))
+}
+
+async fn list_articles(
+    State(db): State<database::Database>,
+) -> WebResult<Html<String>> {
+    let articles = Article::get_published(&db, 100)?;
+    Ok(Html(TEMPLATES.get_template("articles.html.jinja")?.render(
+        context! { articles => articles },
+    )?))
+}
+
+#[derive(Deserialize)]
+struct CreateArticleRequest {
+    author_id: String,
+    title: String,
+    slug: String,
+    summary: Option<String>,
+    content_text: String,
+    publish_date: String,
+    thumbnail_image_id: Option<i64>,
+}
+
+async fn create_article(
+    State(db): State<database::Database>,
+    _: AuthenticatedUser,
+    Json(req): Json<CreateArticleRequest>,
+) -> WebResult<Json<serde_json::Value>> {
+    let article_id = Article::push(
+        &db,
+        &req.author_id,
+        &req.title,
+        &req.slug,
+        req.summary.as_deref(),
+        &req.content_text,
+        &req.publish_date,
+        req.thumbnail_image_id,
+    )?;
+    Ok(Json(serde_json::json!({ "article_id": article_id })))
+}
+
+#[derive(Deserialize)]
+struct UpsertAuthorRequest {
+    author_id: String,
+    display_name: String,
+    bio: String,
+}
+
+async fn upsert_author(
+    State(db): State<database::Database>,
+    _: AuthenticatedUser,
+    Json(req): Json<UpsertAuthorRequest>,
+) -> WebResult<StatusCode> {
+    Author::upsert(&db, &Author {
+        author_id: req.author_id,
+        display_name: req.display_name,
+        bio_rendered: String::new(), // not stored
+        bio: req.bio,
+    })?;
     Ok(StatusCode::OK)
 }
 

@@ -15,12 +15,47 @@
                 <img src="/image/{{recipe.thumbnail_image_id}}"
                     alt="{{recipe.name}}" loading="lazy">
                 {% endif %}
+                {% if recipe.description %}<p class="card-desc">{{recipe.description}}</p>{% endif %}
             </image-card>
         </a>
         {% endfor %}
     </image-cards>
 </section>
 {% endfor %}
+
+{% for highlight in highlights %}
+<section class="front-page-section">
+    <h2>{{ highlight.title }}</h2>
+    <image-cards>
+        {% for recipe in highlight.recipes %}
+        <a href="/recipe/{{recipe.recipe_id}}">
+            <image-card>
+                <h4>{{recipe.name}}</h4>
+                {% if recipe.thumbnail_image_id %}
+                <img src="/image/{{recipe.thumbnail_image_id}}"
+                    alt="{{recipe.name}}" loading="lazy">
+                {% endif %}
+                {% if recipe.description %}<p class="card-desc">{{recipe.description}}</p>{% endif %}
+            </image-card>
+        </a>
+        {% endfor %}
+    </image-cards>
+</section>
+{% endfor %}
+
+{% if articles %}
+<section class="front-page-section">
+    <h2>From Our Writers</h2>
+    {% for article in articles %}
+    <div class="article-card">
+        <h3><a href="/article/{{ article.slug }}">{{ article.title }}</a></h3>
+        <p class="article-meta">{{ article.publish_date }}</p>
+        {% if article.summary %}<p>{{ article.summary }}</p>{% endif %}
+    </div>
+    {% endfor %}
+    <p><a href="/articles">Past articles →</a></p>
+</section>
+{% endif %}
 
 <h2>Discover More</h2>
 <image-cards>
@@ -30,6 +65,7 @@
             <h4>{{recipe.name}}</h4>
             <img src="/image/{{recipe.thumbnail_image_id}}"
                 alt="{{recipe.name}}" loading="lazy">
+            {% if recipe.description %}<p class="card-desc">{{recipe.description}}</p>{% endif %}
         </image-card>
     </a>
     {% endfor %}

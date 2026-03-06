@@ -12,7 +12,7 @@ async fn start_test_server() -> String {
         users: vec![UserCredential { username: "testuser".into(), password_hash: hash }],
     }).await.unwrap();
 
-    let app = build_app(AppState { db, doc_index, auth });
+    let app = build_app(AppState { db, doc_index, auth, tag_axes: Default::default() });
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
 

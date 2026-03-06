@@ -4,7 +4,7 @@ use gk_server::{
     auth::AuthService,
     config::Config,
     database::Database,
-    search, AppState, build_app,
+    search, AppState, TagAxes, build_app,
 };
 use tracing_subscriber::EnvFilter;
 
@@ -57,10 +57,15 @@ async fn main() -> Result<()> {
     // use the embeddings to index the recipes in the background
     tokio::spawn(document_index.clone().background_index());
 
+    let tag_axes = TagAxes::load();
+    tracing::info!("Loaded tag axes: {} cuisine, {} occasion, {} season tags",
+        tag_axes.cuisine.len(), tag_axes.occasion.len(), tag_axes.season.len());
+
     let app = build_app(AppState {
         db: default_db,
         doc_index: document_index,
         auth,
+        tag_axes,
     });
 
     // In development, use HTTP. In production, use HTTPS.
