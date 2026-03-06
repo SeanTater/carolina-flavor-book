@@ -1,0 +1,15 @@
+{% extends "base.html.jinja" %}
+{% block title %}Articles{% endblock %}
+{% block content %}
+<h2>All Articles</h2>
+{% for article in articles %}
+<div class="article-card">
+    <h3><a href="/article/{{ article.slug }}">{{ article.title }}</a></h3>
+    <p class="article-meta">{{ article.publish_date }}</p>
+    {% if article.summary %}<p>{{ article.summary }}</p>{% endif %}
+</div>
+{% endfor %}
+{% if not articles %}
+<p>No articles published yet.</p>
+{% endif %}
+{% endblock %}

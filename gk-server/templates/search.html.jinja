@@ -15,6 +15,7 @@ Search results for "{{query}}"
             <img src="/image/{{search_result.recipe.thumbnail_image_id}}"
                 alt="{{search_result.recipe.name}}" loading="lazy">
             {% endif %}
+            {% if search_result.recipe.description %}<p class="card-desc">{{search_result.recipe.description}}</p>{% endif %}
 
             <search-relevance style="--relevance: {{search_result.relevance}}%;"
                 title="{{search_result.relevance_percent}}% similar"></search-relevance>
