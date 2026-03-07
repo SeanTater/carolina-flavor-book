@@ -23,3 +23,6 @@ venv
 
 # Generated outputs
 outputs/
+
+# Git worktrees
+.worktrees/
