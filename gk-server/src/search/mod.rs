@@ -221,80 +221,21 @@ impl DocumentIndexHandle {
     }
 
     pub fn search_tags(&self) -> Result<Vec<(String, Vec<SearchResult>)>> {
-        let possible_tags = &[
-            // Meals
-            "breakfast",
-            "lunch",
-            "dinner",
-            "snack",
-            "dessert",
-            // Diets
-            "vegetarian",
-            "vegan",
-            "gluten-free",
-            "dairy-free",
-            "low-carb",
-            "low-fat",
-            "low-sugar",
-            "low-sodium",
-            "low-protein",
-            "high-protein",
-            "high-fiber",
-            // Cuisines
-            "american",
-            "italian",
-            "mexican",
-            "chinese",
-            "indian",
-            "japanese",
-            "french",
-            "thai",
-            "greek",
-            "mediterranean",
-            "spanish",
-            "korean",
-            // Ingredients
-            "chicken",
-            "beef",
-            "pork",
-            "seafood",
-            "vegetables",
-            "pasta",
-            "rice",
-            "potatoes",
-            "beans",
-            "cheese",
-            // Occasions
-            "party",
-            "picnic",
-            "potluck",
-            "barbecue",
-            "camping",
-            "tailgating",
-            "birthday",
-            // Holidays
-            "holiday",
-            "christmas",
-            "easter",
-            "halloween",
-            "thanksgiving",
-            "valentines",
-            "independence-day",
-            "st-patricks-day",
-            // Cooking methods
-            "grilling",
-            "baking",
-            "roasting",
-            "slow-cooker",
-            "pressure-cooker",
-            "air-fryer",
-            // Time allowances
-            "quick",
-            "easy",
-            "make-ahead",
-            "freezer-friendly",
-            "one-pot",
-        ];
+        let grid: toml::Value =
+            toml::from_str(include_str!("../../../config/recipe-grid.toml"))
+                .expect("recipe-grid.toml should be valid TOML");
+        let possible_tags: Vec<&str> = grid["axes"]
+            .as_table()
+            .expect("axes should be a table")
+            .values()
+            .flat_map(|axis| {
+                axis["tags"]
+                    .as_array()
+                    .expect("tags should be an array")
+                    .iter()
+                    .map(|v| v.as_str().expect("tag should be a string"))
+            })
+            .collect();
         let mut all_results = vec![];
         for tag in possible_tags {
             let results = self
