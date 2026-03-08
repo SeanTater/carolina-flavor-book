@@ -23,6 +23,14 @@ pub struct TagEntry {
     pub tag: String,
 }
 
+/// Recipe with full text content from /api/recipes/text.
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct RecipeWithText {
+    pub recipe_id: i64,
+    pub name: String,
+    pub content_text: String,
+}
+
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct MissingImageRecipe {
     pub recipe_id: i64,
@@ -141,6 +149,16 @@ impl ContentClient {
             .send()
             .await?;
         ensure!(resp.status().is_success(), "Failed to get recipes: {}", resp.status());
+        Ok(resp.json().await?)
+    }
+
+    /// Get all recipes with their full text content.
+    pub async fn get_all_recipes_with_text(&self) -> Result<Vec<RecipeWithText>> {
+        let resp = self.http
+            .get(format!("{}/api/recipes/text", self.server))
+            .send()
+            .await?;
+        ensure!(resp.status().is_success(), "Failed to get recipes text: {}", resp.status());
         Ok(resp.json().await?)
     }
 

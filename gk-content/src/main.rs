@@ -1,6 +1,7 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
+use std::collections::{BTreeMap, HashSet};
 
 use gk_content::{client::ContentClient, gaps, grid, ingest};
 
@@ -126,6 +127,22 @@ enum Commands {
     IngestSchedule {
         /// Path to JSON file: [{date, section, title, blurb?, query_tags}, ...]
         file: String,
+    },
+    /// Generate batch files for recipe retagging
+    Retag {
+        /// Output directory for batch files (default: /tmp)
+        #[arg(long, default_value = "/tmp")]
+        output_dir: String,
+
+        /// Batch size (default: 50)
+        #[arg(long, default_value = "50")]
+        batch_size: usize,
+    },
+    /// Apply retagging results from batch output files
+    ApplyRetag {
+        /// Directory containing retag-output-*.json files (default: /tmp)
+        #[arg(long, default_value = "/tmp")]
+        input_dir: String,
     },
 }
 
@@ -275,7 +292,122 @@ async fn main() -> Result<()> {
             client.upsert_schedule(&sections).await?;
             println!("Loaded {} front page sections", count);
         }
+        Commands::Retag { output_dir, batch_size } => {
+            const PROVENANCE_TAGS: &[&str] = &[
+                "church-cookbook", "pin-like", "hyman", "freestyle",
+                "from-notes", "breadmaker", "manual", "contrib", "bulk",
+            ];
+            let provenance_set: HashSet<&str> = PROVENANCE_TAGS.iter().copied().collect();
+
+            eprintln!("Fetching all recipes with text...");
+            let recipes = client.get_all_recipes_with_text().await?;
+            eprintln!("Fetching all tags...");
+            let all_tags = client.get_all_tags().await?;
+
+            // Build tag map: recipe_id -> Vec<tag>
+            let mut tag_map: BTreeMap<i64, Vec<String>> = BTreeMap::new();
+            for entry in &all_tags {
+                tag_map.entry(entry.recipe_id).or_default().push(entry.tag.clone());
+            }
+
+            // Build batch entries
+            let mut batches: Vec<Vec<RetagBatchEntry>> = Vec::new();
+            let mut current_batch: Vec<RetagBatchEntry> = Vec::new();
+
+            for recipe in &recipes {
+                let tags = tag_map.get(&recipe.recipe_id).cloned().unwrap_or_default();
+                let (prov, current): (Vec<_>, Vec<_>) = tags.iter()
+                    .cloned()
+                    .partition(|t| provenance_set.contains(t.as_str()));
+
+                current_batch.push(RetagBatchEntry {
+                    recipe_id: recipe.recipe_id,
+                    name: recipe.name.clone(),
+                    content: recipe.content_text.clone(),
+                    current_tags: current,
+                    provenance_tags: prov,
+                });
+
+                if current_batch.len() >= batch_size {
+                    batches.push(std::mem::take(&mut current_batch));
+                }
+            }
+            if !current_batch.is_empty() {
+                batches.push(current_batch);
+            }
+
+            // Write batch files
+            for (i, batch) in batches.iter().enumerate() {
+                let path = format!("{output_dir}/retag-batch-{i}.json");
+                let json = serde_json::to_string_pretty(batch)?;
+                std::fs::write(&path, json)?;
+                eprintln!("Wrote {} recipes to {path}", batch.len());
+            }
+            println!("Generated {} batch files with {} total recipes", batches.len(), recipes.len());
+        }
+        Commands::ApplyRetag { input_dir } => {
+            // Find all retag-output-*.json files
+            let mut output_files: Vec<String> = Vec::new();
+            for entry in std::fs::read_dir(&input_dir)? {
+                let entry = entry?;
+                let name = entry.file_name().to_string_lossy().to_string();
+                if name.starts_with("retag-output-") && name.ends_with(".json") {
+                    output_files.push(entry.path().to_string_lossy().to_string());
+                }
+            }
+            output_files.sort();
+
+            if output_files.is_empty() {
+                anyhow::bail!("No retag-output-*.json files found in {input_dir}");
+            }
+            eprintln!("Found {} output files", output_files.len());
+
+            let mut total = 0u64;
+            let mut failed = 0u64;
+            for file_path in &output_files {
+                let content = std::fs::read_to_string(file_path)?;
+                let entries: BTreeMap<String, RetagOutputEntry> = serde_json::from_str(&content)?;
+
+                for (recipe_id_str, entry) in &entries {
+                    let recipe_id: i64 = recipe_id_str.parse()?;
+                    let mut merged = entry.tags.clone();
+                    merged.extend(entry.provenance.iter().cloned());
+                    merged.sort();
+                    merged.dedup();
+
+                    let patch = serde_json::json!({"tags": merged});
+                    match client.patch_recipe(recipe_id, &patch).await {
+                        Ok(()) => {
+                            total += 1;
+                            if total % 100 == 0 {
+                                eprintln!("Retagged {total} recipes...");
+                            }
+                        }
+                        Err(e) => {
+                            eprintln!("  ✗ recipe {recipe_id}: {e}");
+                            failed += 1;
+                        }
+                    }
+                }
+            }
+            println!("Retagged {total} recipes, {failed} failures");
+        }
     }
 
     Ok(())
+}
+
+#[derive(Serialize, Deserialize)]
+struct RetagBatchEntry {
+    recipe_id: i64,
+    name: String,
+    content: String,
+    current_tags: Vec<String>,
+    provenance_tags: Vec<String>,
+}
+
+#[derive(Serialize, Deserialize)]
+struct RetagOutputEntry {
+    tags: Vec<String>,
+    provenance: Vec<String>,
 }
