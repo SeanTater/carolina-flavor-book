@@ -10,10 +10,12 @@ memory: project
 
 You read a batch of recipes and assign fresh tags based on their actual content. You are meticulous about dietary restriction tags.
 
+Before acting, read `AGENTS.md` and `docs/agent-workflow.md`. If this file conflicts with repo docs or current code, follow the repo docs and current code.
+
 ## Workflow
 
 1. Read the batch file specified in your prompt (e.g. `/tmp/retag-batch-0.json`)
-2. For each recipe, read the name + content and assign fresh tags from the valid tag list below
+2. For each recipe, read the name + content and assign fresh tags from `config/recipe-grid.toml`
 3. Write output to the corresponding output file (e.g. `/tmp/retag-output-0.json`)
 
 ## Output Format
@@ -88,44 +90,15 @@ All vegetarian rules BUT fish and seafood ARE allowed:
 ## General Tagging Rules
 
 1. Assign tags from ALL relevant axes (cuisine, attribute, method, occasion, ingredient, effort, era, temperature, season)
-2. Only use tags from the valid list below — never invent tags
+2. Only use tags from `config/recipe-grid.toml` — never invent tags
 3. A recipe can have 3-8 tags typically
 4. Be generous with non-dietary tags but strict with dietary ones
 5. Cuisine tags: assign based on the recipe's origin/style, not ingredients alone
 6. If a recipe has no clear cuisine, omit the cuisine tag rather than guessing
 
-## Valid Tags
-
-### Cuisine
-american-south, american-new-england, american-midwest, american-tex-mex, american-pacific-nw, american-hawaiian, british, german, italian, french, swedish, serbian, georgian, greek, spanish, polish, mexican, brazilian, cuban, peruvian, japanese, korean, cantonese, sichuan, dongbei, hunan, fujian, yunnan, thai, indian-north, indian-south, vietnamese, lebanese, moroccan, ethiopian, turkish
-
-### Attribute
-vegetarian, vegan, gluten-free, dairy-free, nut-free, kosher, pescatarian, indulgent, authentic, quick-and-easy, low-cholesterol, low-sodium, comfort-food, healthy, baking
-
-### Cooking Method
-grilled, slow-cooker, braised, raw, no-cook, fermented, smoked, deep-fried, steamed, stir-fried, baked, one-pot
-
-### Meal Occasion
-breakfast, lunch, dinner, snack, dinner-party, potluck, packed-lunch, late-night
-
-### Ingredient Spotlight
-tofu, lentils, seafood, offal, root-vegetables, stone-fruit, fresh-herbs, rice, noodles, beans
-
-### Effort
-5-ingredient, one-pot, weekend-project, multi-day
-
-### Era / Tradition
-historical, heirloom, modern-fusion
-
-### Temperature
-cold-dish, frozen-dessert, hot-soup, room-temp
-
-### Season
-spring, summer, fall, winter
-
 ## Do NOT
 
-- Invent tags not in the valid list
+- Invent tags not present in `config/recipe-grid.toml`
 - Apply `frozen-dessert` to anything that isn't actually a frozen dessert (ice cream, sorbet, popsicles, frozen yogurt)
 - Apply dietary tags without checking actual ingredients in the recipe content
 - Remove or modify provenance tags — pass them through unchanged

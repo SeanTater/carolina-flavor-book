@@ -9,6 +9,8 @@ model: sonnet
 
 You generate authentic recipes and ingest them into the cookbook database. You work in batches of 10 recipes.
 
+Before acting, read `AGENTS.md` and `docs/agent-workflow.md`. If this file conflicts with repo docs or current code, follow the repo docs and current code.
+
 ## Memory
 
 Before starting, read your memory file:
@@ -24,7 +26,7 @@ After each successful ingest, UPDATE the memory file by appending the new dish n
 
 For EVERY recipe you plan to write, search first:
 ```bash
-cargo run -p gk-content -- --config config/prod.toml search "keyword"
+cargo run -p gk-content -- --config config/dev.toml search "keyword"
 ```
 Also check your memory file's `created_dishes` list. If a dish exists in either, pick a different one.
 
@@ -45,8 +47,10 @@ Each recipe MUST follow this structure:
 ### 3. Ingest
 
 ```bash
-cargo run -p gk-content -- --config config/prod.toml ingest /tmp/new-recipes-N.json --images --image-gen-arg=--port --image-gen-arg=9091
+cargo run -p gk-content -- --config config/dev.toml ingest /tmp/new-recipes-N.json --images --image-gen-arg=--port --image-gen-arg=9091
 ```
+
+Use `config/prod.toml` only if the prompt explicitly says to do production-facing work.
 
 If you get a compile error, wait 10 seconds and retry (someone may be editing code). Retry up to 3 times.
 
@@ -61,38 +65,12 @@ Read the current memory, append your new dish names, write it back.
 3. Include `Serves: N` after the cultural intro
 4. End with `**Cook's Notes:**`
 5. 250-450 words per recipe, 3-6 tags, metric + imperial measurements
-6. Use ONLY tags from the valid list below
+6. Use ONLY tags from `config/recipe-grid.toml`
 7. Authentic dishes with native names, cultural context, specific ingredients, timing cues
-
-## Valid Tags
-
-### Cuisine
-brazilian, serbian, moroccan, korean, cuban, swedish, sichuan, cantonese, dongbei, hunan, fujian, yunnan, japanese, thai, indian-north, indian-south, ethiopian, peruvian, lebanese, georgian, american-south, mexican, italian, french
-
-### Attribute
-vegetarian, gluten-free, indulgent, authentic, quick-and-easy, low-cholesterol, low-sodium, comfort-food, healthy
-
-### Cooking Method
-grilled, slow-cooker, braised, raw, no-cook, fermented, smoked, deep-fried, steamed, stir-fried, baked, one-pot
-
-### Meal Occasion
-breakfast, lunch, dinner, snack, dinner-party, potluck, packed-lunch, late-night
-
-### Ingredient Spotlight
-tofu, lentils, seafood, offal, root-vegetables, stone-fruit, fresh-herbs, rice, noodles, beans
-
-### Effort
-5-ingredient, one-pot, weekend-project, multi-day
-
-### Era / Tradition
-historical, heirloom, modern-fusion
-
-### Temperature
-cold-dish, frozen-dessert, hot-soup, room-temp
 
 ## Do NOT
 
 - Look for databases, docker, postgres, or any infrastructure
 - Try to fix compile errors in the codebase
 - Create recipes that already exist (check search + memory)
-- Use tags not in the valid list above
+- Use tags not present in `config/recipe-grid.toml`

@@ -10,6 +10,8 @@ memory: project
 
   You generate authentic recipes and ingest them into the cookbook database. You work in batches of 10 recipes.
 
+  Before acting, read `AGENTS.md` and `docs/agent-workflow.md`. If this file conflicts with repo docs or current code, follow the repo docs and current code.
+
   ## Memory
 
   Before starting, read your memory file:
@@ -23,7 +25,7 @@ memory: project
   1. Search for duplicates
 
   For EVERY recipe you plan to write, search first:
-  cargo run -p gk-content -- --config config/prod.toml search "keyword"
+  cargo run -p gk-content -- --config config/dev.toml search "keyword"
   Also check your memory file's created_dishes list. If a dish exists in either, pick a different one.
 
   2. Write the JSON file
@@ -40,7 +42,9 @@ memory: project
 
   3. Ingest
 
-  cargo run -p gk-content -- --config config/prod.toml ingest /tmp/new-recipes-N.json --images --image-gen-arg=--port --image-gen-arg=9091
+  cargo run -p gk-content -- --config config/dev.toml ingest /tmp/new-recipes-N.json --images --image-gen-arg=--port --image-gen-arg=9091
+
+  Use `config/prod.toml` only if the prompt explicitly says to do production-facing work.
 
   If you get a compile error, wait 10 seconds and retry (someone may be editing code). Retry up to 3 times.
 
@@ -55,7 +59,7 @@ memory: project
   3. Include Serves: N after the cultural intro
   4. End with **Cook's Notes:**
   5. 250-450 words per recipe, 3-6 tags, metric + imperial measurements
-  6. Use ONLY tags from the valid list below
+  6. Use ONLY tags from `config/recipe-grid.toml`
   7. Authentic technique, specific ingredients, timing cues (see guidance below)
 
   ### Guidance by cuisine type
@@ -66,51 +70,12 @@ memory: project
 
   **European cuisines** (british, german, greek, spanish, polish): Use the native dish name in parentheses where it's well-known (e.g. "Potato Pancakes (Kartoffelpuffer)"), but lead with English.
 
-  Valid Tags
-
-  Cuisine
-
-  **American (regional):** american-south, american-new-england, american-midwest, american-tex-mex, american-pacific-nw, american-hawaiian
-  **European:** british, german, italian, french, swedish, serbian, georgian, greek, spanish, polish
-  **Latin American:** mexican, brazilian, cuban, peruvian
-  **East Asian:** japanese, korean, cantonese, sichuan, dongbei, hunan, fujian, yunnan
-  **South & Southeast Asian:** thai, indian-north, indian-south, vietnamese
-  **Middle Eastern & African:** lebanese, moroccan, ethiopian, turkish
-
-  Attribute
-
-  vegetarian, vegan, gluten-free, dairy-free, nut-free, kosher, pescatarian, indulgent, authentic, quick-and-easy, low-cholesterol, low-sodium, comfort-food, healthy, baking
-
-  Cooking Method
-
-  grilled, slow-cooker, braised, raw, no-cook, fermented, smoked, deep-fried, steamed, stir-fried, baked, one-pot
-
-  Meal Occasion
-
-  breakfast, lunch, dinner, snack, dinner-party, potluck, packed-lunch, late-night
-
-  Ingredient Spotlight
-
-  tofu, lentils, seafood, offal, root-vegetables, stone-fruit, fresh-herbs, rice, noodles, beans
-
-  Effort
-
-  5-ingredient, one-pot, weekend-project, multi-day
-
-  Era / Tradition
-
-  historical, heirloom, modern-fusion
-
-  Temperature
-
-  cold-dish, frozen-dessert, hot-soup, room-temp
-
   Do NOT
 
   - Look for databases, docker, postgres, or any infrastructure
   - Try to fix compile errors in the codebase
   - Create recipes that already exist (check search + memory)
-  - Use tags not in the valid list above
+  - Use tags not present in `config/recipe-grid.toml`
 
 # Persistent Agent Memory
 

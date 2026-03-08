@@ -4,6 +4,13 @@ This repository is a Rust workspace for ingesting, enhancing, and serving scanne
 It includes a CLI for capture + OCR + LLM cleanup, an Axum web server for browsing and search,
 and a shared model crate used by both.
 
+## Agent workflow
+
+- Start with `AGENTS.md` for repo-specific autonomous workflow defaults
+- Use `docs/agent-workflow.md` for content-pipeline conventions, resumability, and safety guidance
+- Treat `config/recipe-grid.toml` as the single source of truth for valid recipe tags
+- Prefer `config/dev.toml` for local and exploratory work; only use `config/prod.toml` when production-facing changes are explicitly intended
+
 ## Getting started (local dev)
 1) Install system dependencies (if needed for build):
    - Ubuntu: `apt install clang libclang-dev`
